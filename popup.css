@@ -4,7 +4,7 @@ body {
     color: #fff;
     font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
     text-align: center;
-    margin: 0; 
+    margin: 0;
     padding: 0;
 }
 
@@ -66,6 +66,7 @@ h2 {
     align-items: center;
     justify-content: center;
     margin-bottom: 15px;
+    visibility: visible !important;
 }
 
 #statusText {
@@ -92,6 +93,10 @@ h2 {
     margin: 10px 0;
     letter-spacing: 2px;
     text-shadow: 0 0 5px rgba(255, 121, 198, 0.3);
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* Timer Form */
@@ -100,6 +105,37 @@ h2 {
     flex-direction: column;
     gap: 10px;
     margin: 10px 0;
+    transition: all 0.3s ease;
+    visibility: visible !important;
+}
+
+.timer-form .time-input {
+    display: flex; /* Default: show time input */
+}
+
+.timer-form #start-timer-btn {
+    display: block; /* Default: show start button */
+}
+
+.timer-form #stop-timer-btn {
+    display: none; /* Default: hide stop button */
+}
+
+/* Styles when timer is active */
+.timer-form.timer-active .time-input {
+    display: none !important; /* Hide time input when timer is active */
+}
+
+.timer-form.timer-active #start-timer-btn {
+    display: none !important; /* Hide start button when timer is active */
+}
+
+.timer-form.timer-active #stop-timer-btn {
+    display: block !important; /* Show stop button when timer is active */
+}
+
+.timer-form.hidden {
+    display: none;
 }
 
 .time-input {
@@ -168,10 +204,33 @@ button:disabled {
     transform: none;
 }
 
-#start-timer-btn {
+#start-timer-btn, #stop-timer-btn {
     padding: 10px;
     font-size: 14px;
     font-weight: 600;
+    width: 100%;
+    margin-top: 5px;
+}
+
+#stop-timer-btn {
+    background: #ff79c6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: block !important;
+    width: 100%;
+    margin-top: 5px;
+    padding: 10px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+#stop-timer-btn:hover {
+    background: #ff92d0;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(255, 121, 198, 0.3);
 }
 
 /* Message Display */
@@ -225,17 +284,20 @@ li {
     display: inline-block;
     width: 40px;
     height: 22px;
+    opacity: 1;
+    visibility: visible !important;
 }
 
 .switch input {
     opacity: 0;
     width: 0;
     height: 0;
+    cursor: default;
 }
 
 .slider {
     position: absolute;
-    cursor: pointer;
+    cursor: default;
     top: 0;
     left: 0;
     right: 0;
@@ -243,6 +305,7 @@ li {
     background-color: #555;
     border-radius: 22px;
     transition: 0.3s;
+    visibility: visible !important;
 }
 
 .slider:before {
@@ -255,6 +318,7 @@ li {
     background-color: white;
     border-radius: 50%;
     transition: 0.3s;
+    visibility: visible !important;
 }
 
 input:checked + .slider {
@@ -263,6 +327,15 @@ input:checked + .slider {
 
 input:checked + .slider:before {
     transform: translateX(18px);
+}
+
+/* Disabled state styles */
+.switch input:disabled + .slider {
+    opacity: 1;
+}
+
+.switch input:disabled + .slider:before {
+    opacity: 1;
 }
 
 /* New Styles for URL show/hide functionality */

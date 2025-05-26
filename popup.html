@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <link rel="stylesheet" href="popup.css">
-    <link rel="stylesheet" href="game.css">
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;600&family=Roboto:wght@400;500;600&display=swap" rel="stylesheet">
@@ -17,16 +17,6 @@
         </div>
         
         <!-- Game Container - will show only in focus mode -->
-        <div id="game-container">
-            <div id="score">Score: 0</div>
-            <div id="cannon">
-                <!-- Cannon base element removed -->
-                <div id="cannon-barrel"></div>
-            </div>
-            <div id="ball"></div>
-            <div id="bucket"></div>
-            <div id="game-message">Click cannon to shoot!</div>
-        </div>
         
         <!-- Toggle Section -->
         <div class="toggle-wrapper">
@@ -48,6 +38,7 @@
                     <span>minutes</span>
                 </div>
                 <button id="start-timer-btn">Start Focus Mode</button>
+                <button id="stop-timer-btn" style="display: none;">Stop Timer</button>
             </div>
             <div id="timer-message" class="message"></div>
         </div>
@@ -70,6 +61,5 @@
         </div>
     </div>
     <script src="popup.js"></script>
-    <script src="game.js"></script>
 </body>
 </html>

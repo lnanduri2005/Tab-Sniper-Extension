@@ -260,25 +260,28 @@ function checkAllOpenTabs() {
 
 // Listen for storage changes to keep state in sync
 chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'sync') {
-        console.log("Storage changes:", changes);
-        
-        if (changes.enabled !== undefined) {
-            enabled = changes.enabled.newValue;
-            console.log("Enabled state updated:", enabled);
-            updateIcon();
-        }
-        if (changes.timerActive !== undefined) {
+    console.log("Storage changes:", changes);
+    if (namespace === "sync") {
+        // Only update local state if it's not a timer start event setting timerActive to true
+        if (changes.timerActive && changes.timerActive.newValue === true && timerActive === false) {
+             // This is likely the timer starting, the startTimer handler already updated state
+             console.log("Ignoring storage change for timerActive start, handled by startTimer");
+        } else if (changes.timerActive) {
             timerActive = changes.timerActive.newValue;
             console.log("Timer active state updated:", timerActive);
-            
-            // If timer becomes active, check all open tabs
-            if (timerActive) {
-                checkAllOpenTabs();
-            }
         }
-        if (changes.timerEndTime !== undefined) {
-            timerEndTime = changes.timerEndTime.newValue;
+
+        if (changes.enabled) {
+            enabled = changes.enabled.newValue;
+            updateIcon();
+            console.log("Enabled state updated:", enabled);
+        }
+        if (changes.timerEndTime) {
+             // Only update if the new end time is later than current, or if timer becomes inactive
+            if (changes.timerEndTime.newValue > timerEndTime || !timerActive) {
+                 timerEndTime = changes.timerEndTime.newValue;
+                 console.log("Timer end time updated:", timerEndTime);
+            }
         }
     }
 });

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Tab Sniper",
   "version": "1.0",
-  "description": "Closes tabs with specified URLs automatically.",
+  "description": "Stay focused by blocking distracting websites during study or work sessions. Features a customizable timer and a mini-game to earn back access to blocked sites.",
   "permissions": ["storage", "tabs", "webNavigation"],
   "background": {
     "service_worker": "background.js"
@@ -15,5 +15,7 @@
       "48": "icon_sleep.png",
       "128": "icon_sleep.png"
     }
-  }
+  },
+  "homepage_url": "https://github.com/your-github-profile/Tab-Sniper",
+  "author": "Likitha Nanduri, Abhigna Nimmagadda, Parikshith Venkataraghavan"
 }

@@ -14,21 +14,12 @@ Tab Sniper is a Chrome extension designed to help you stay focused by blocking d
 - **Game Challenge**: The only way to disable focus mode early is to win a skill-based cannon game
 - **User-Friendly Interface**: Clean, dark-themed UI for a distraction-free experience
 
-## 🎮 The Challenge Game
-
-When focus mode is active and you try to remove a blocked URL, you'll be presented with a cannon game:
-- Aim and shoot the cannon to get the ball into the moving bucket
-- Score 3 points to disable focus mode and unlock all websites
-- Limited to 3 shots maximum per attempt
-- Adjustable difficulty with moving targets and physics
-
 ## 🚀 How It Works
 
 1. **Add Websites**: Enter URLs you want to block during focus time
 2. **Set Timer**: Choose how long you want to stay focused (in minutes)
 3. **Start Focus Mode**: Activate the timer to begin blocking the specified websites
 4. **Stay Focused**: Any attempt to visit blocked sites will be automatically prevented
-5. **Emergency Override**: If you absolutely need to access a site, win the cannon game
 
 ## 🔧 Usage
 
@@ -77,5 +68,5 @@ Contributions are welcome! Feel free to submit pull requests or create issues fo
 
 ---
 
-Made with ❤️ to help you stay focused and productive
+Developed by Likitha Nanduri, Abhigna Nimmagadda, Parikshith Venkataraghavan to help you stay focused and productive!
 
