@@ -1,0 +1,97 @@
+/* Game-specific CSS */
+#game-container {
+    display: none;
+    width: 100%;
+    height: 150px;
+    background-color: #333;
+    border-radius: 8px;
+    position: relative;
+    margin-bottom: 15px;
+    overflow: hidden;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+}
+
+#cannon {
+    position: absolute;
+    left: 20px;  /* Moved to left side */
+    bottom: 10px; /* Match position with the bucket */
+    width: 50px;
+    height: 50px;
+    cursor: pointer;
+    z-index: 2;
+}
+
+#cannon-barrel {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    bottom: -10px;
+    left: 0;
+    background-image: url('cannon.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    transform-origin: center center;
+    transition: transform 0.1s ease;
+}
+
+#ball {
+    position: absolute;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background-color: #ff79c6;
+    display: none;
+    z-index: 1;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+#bucket {
+    position: absolute;
+    right: 20px;  /* Moved to right side */
+    bottom: 10px;
+    width: 30px;
+    height: 30px;
+    background-image: url('basket.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+#score {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    color: #ff79c6;
+    font-size: 13px;
+    font-weight: 600;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+}
+
+#game-message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    text-align: center;
+    color: #8be9fd;
+    font-size: 14px;
+    font-weight: 600;
+    opacity: 0;
+    transition: opacity 0.8s;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+    z-index: 10;
+    font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    letter-spacing: 0.3px;
+}
+
+/* Ground design */
+#game-container:after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 10px;
+    background-color: #444;
+}

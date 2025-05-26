@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Sniper",
+  "version": "1.0",
+  "description": "Closes tabs with specified URLs automatically.",
+  "permissions": ["storage", "tabs", "webNavigation"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon_sleep.png",
+      "48": "icon_sleep.png",
+      "128": "icon_sleep.png"
+    }
+  }
+}

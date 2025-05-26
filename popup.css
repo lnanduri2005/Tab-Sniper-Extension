@@ -1,0 +1,333 @@
+body {
+    width: 300px;
+    background-color: #222;
+    color: #fff;
+    font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    text-align: center;
+    margin: 0; 
+    padding: 0;
+}
+
+.container {
+    padding: 15px;
+}
+
+/* Logo styling */
+#logo-container {
+    transition: all 0.3s ease;
+}
+
+.centered-logo {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 15px;
+}
+
+.corner-logo {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    width: 40px;
+    height: 40px;
+    z-index: 1;
+}
+
+#app-logo {
+    width: 60px;
+    height: 60px;
+    transition: all 0.3s ease;
+}
+
+.corner-logo #app-logo {
+    width: 40px;
+    height: 40px;
+}
+
+h1 {
+    font-size: 22px;
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #ff79c6;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+h2 {
+    font-size: 16px;
+    margin: 0 0 10px 0;
+    color: #ff92d0;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+}
+
+/* Toggle Section */
+.toggle-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 15px;
+}
+
+#statusText {
+    margin-right: 10px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+/* Box Styles */
+.timer-box, .url-box {
+    background: #333;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16);
+}
+
+/* Timer Display */
+#timer-display {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 36px;
+    font-weight: 600;
+    color: #ff79c6;
+    margin: 10px 0;
+    letter-spacing: 2px;
+    text-shadow: 0 0 5px rgba(255, 121, 198, 0.3);
+}
+
+/* Timer Form */
+.timer-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+.time-input {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+
+.time-input input {
+    width: 60px;
+    text-align: center;
+    font-size: 14px;
+    padding: 8px;
+    border-radius: 6px;
+}
+
+.time-input span {
+    font-size: 14px;
+}
+
+/* URL Form */
+.url-form {
+    display: flex;
+    gap: 5px;
+    margin-top: 10px;
+}
+
+.url-form input {
+    flex-grow: 1;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+/* Common Form Elements */
+input, button {
+    border: none;
+    border-radius: 6px;
+    padding: 8px;
+    background: #444;
+    color: #fff;
+}
+
+input:focus {
+    outline: 2px solid #ff79c6;
+    box-shadow: 0 0 0 1px rgba(255, 121, 198, 0.3);
+}
+
+button {
+    background: #ff79c6;
+    color: white;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    letter-spacing: 0.3px;
+}
+
+button:hover {
+    background: #ff92d0;
+    transform: translateY(-1px);
+}
+
+button:disabled {
+    background: #666;
+    cursor: not-allowed;
+    transform: none;
+}
+
+#start-timer-btn {
+    padding: 10px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* Message Display */
+.message {
+    height: 20px;
+    font-size: 12px;
+    color: #ff79c6;
+    font-style: italic;
+}
+
+/* URL List */
+ul {
+    list-style: none;
+    padding: 0;
+    margin: 5px 0;
+    max-height: 120px;
+    overflow-y: auto;
+    text-align: left;
+}
+
+li {
+    background: #444;
+    margin: 5px 0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
+.remove-btn {
+    background: none;
+    border: none;
+    color: #ff79c6;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    transition: all 0.2s ease;
+}
+
+.remove-btn:hover {
+    color: #ff92d0;
+    transform: scale(1.1);
+}
+
+/* Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #555;
+    border-radius: 22px;
+    transition: 0.3s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    border-radius: 50%;
+    transition: 0.3s;
+}
+
+input:checked + .slider {
+    background-color: #ff79c6;
+}
+
+input:checked + .slider:before {
+    transform: translateX(18px);
+}
+
+/* New Styles for URL show/hide functionality */
+.peek-btn {
+    width: 100%;
+    padding: 10px;
+    margin: 5px 0;
+    font-size: 14px;
+    background-color: #8be9fd;
+    color: #282a36;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(139, 233, 253, 0.3);
+}
+
+.peek-btn:hover {
+    background-color: #a4f0ff;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(139, 233, 253, 0.4);
+}
+
+/* URL List Container Animation */
+#url-list-container {
+    transition: all 0.3s ease;
+}
+
+#url-list-container.hidden {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    padding: 0;
+    margin: 0;
+}
+
+#url-list-container.visible {
+    max-height: 500px;
+    opacity: 1;
+}
+
+/* Countdown Display */
+.countdown {
+    font-size: 12px;
+    color: #8be9fd;
+    margin-top: 5px;
+    font-weight: 500;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #333;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
