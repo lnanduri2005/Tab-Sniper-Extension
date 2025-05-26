@@ -68,7 +68,12 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
         if (blockedUrls.some(url => details.url.includes(url))) {
             console.log("Blocking navigation to:", details.url);
             // Cancel the navigation by removing the tab
-            chrome.tabs.remove(details.tabId);
+            chrome.tabs.remove(details.tabId).catch(error => {
+                // Ignore errors if tab doesn't exist
+                if (!error.message.includes("No tab with id")) {
+                    console.error("Error removing tab:", error);
+                }
+            });
         } else {
             console.log("Navigation allowed:", details.url);
         }
@@ -101,7 +106,12 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         // Check if URL contains any of the blocked URLs
         if (blockedUrls.some(url => changeInfo.url.includes(url))) {
             console.log("Blocking updated URL:", changeInfo.url);
-            chrome.tabs.remove(tabId);
+            chrome.tabs.remove(tabId).catch(error => {
+                // Ignore errors if tab doesn't exist
+                if (!error.message.includes("No tab with id")) {
+                    console.error("Error removing tab:", error);
+                }
+            });
         }
     });
 });
@@ -251,7 +261,12 @@ function checkAllOpenTabs() {
             tabs.forEach(tab => {
                 if (tab.url && blockedUrls.some(url => tab.url.includes(url))) {
                     console.log("Blocking existing tab:", tab.url);
-                    chrome.tabs.remove(tab.id);
+                    chrome.tabs.remove(tab.id).catch(error => {
+                        // Ignore errors if tab doesn't exist
+                        if (!error.message.includes("No tab with id")) {
+                            console.error("Error removing tab:", error);
+                        }
+                    });
                 }
             });
         });
@@ -260,28 +275,25 @@ function checkAllOpenTabs() {
 
 // Listen for storage changes to keep state in sync
 chrome.storage.onChanged.addListener((changes, namespace) => {
-    console.log("Storage changes:", changes);
-    if (namespace === "sync") {
-        // Only update local state if it's not a timer start event setting timerActive to true
-        if (changes.timerActive && changes.timerActive.newValue === true && timerActive === false) {
-             // This is likely the timer starting, the startTimer handler already updated state
-             console.log("Ignoring storage change for timerActive start, handled by startTimer");
-        } else if (changes.timerActive) {
+    if (namespace === 'sync') {
+        console.log("Storage changes:", changes);
+        
+        if (changes.enabled !== undefined) {
+            enabled = changes.enabled.newValue;
+            console.log("Enabled state updated:", enabled);
+            updateIcon();
+        }
+        if (changes.timerActive !== undefined) {
             timerActive = changes.timerActive.newValue;
             console.log("Timer active state updated:", timerActive);
-        }
-
-        if (changes.enabled) {
-            enabled = changes.enabled.newValue;
-            updateIcon();
-            console.log("Enabled state updated:", enabled);
-        }
-        if (changes.timerEndTime) {
-             // Only update if the new end time is later than current, or if timer becomes inactive
-            if (changes.timerEndTime.newValue > timerEndTime || !timerActive) {
-                 timerEndTime = changes.timerEndTime.newValue;
-                 console.log("Timer end time updated:", timerEndTime);
+            
+            // If timer becomes active, check all open tabs
+            if (timerActive) {
+                checkAllOpenTabs();
             }
+        }
+        if (changes.timerEndTime !== undefined) {
+            timerEndTime = changes.timerEndTime.newValue;
         }
     }
 });

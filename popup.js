@@ -8,13 +8,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const timerDisplay = document.getElementById("timer-display");
     const timerMinutes = document.getElementById("timer-minutes");
     const startTimerBtn = document.getElementById("start-timer-btn");
-    const stopTimerBtn = document.getElementById("stop-timer-btn");
     const timerMessage = document.getElementById("timer-message");
     const showUrlsBtn = document.getElementById("show-urls-btn");
     const urlListContainer = document.getElementById("url-list-container");
     const disableConfirm = document.getElementById("disableConfirm");
     const confirmDisableBtn = document.getElementById("confirmDisableBtn");
-    const gameContainer = document.getElementById("game-container");
     
     // Timer variables
     let countdownInterval = null;
@@ -38,69 +36,32 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     showUrlsBtn.addEventListener("click", toggleUrlVisibility);
 
-    // Add stop timer button click handler
-    stopTimerBtn.addEventListener("click", () => {
-        if (window.gameController && window.gameController.initGame) {
-            window.gameController.initGame();
-            // Scroll to the game container
-            if (gameContainer) {
-                gameContainer.scrollIntoView({ behavior: 'smooth' });
-            }
-        }
-    });
-
-    // Handle toggle switch
-    toggleSwitch.addEventListener("click", (event) => {
-        // Prevent any interaction with the switch
-        event.preventDefault();
-        event.stopPropagation();
-        return false;
-    });
-
-    // Also prevent the change event from firing
-    toggleSwitch.addEventListener("change", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        return false;
-    });
-
-    // Make the switch visually appear disabled
-    toggleSwitch.disabled = true;
-    toggleSwitch.style.pointerEvents = 'none';
-
+    // Remove the toggle switch event listener since it should only reflect timer state
+    
     showUrlsBtn.addEventListener("click", toggleUrlVisibility);
     startTimerBtn.addEventListener("click", () => {
         const minutes = parseInt(timerMinutes.value);
     
         if (isNaN(minutes) || minutes < 1) {
             timerMessage.textContent = "Please enter a valid time";
-            console.log("Invalid timer duration");
             return;
         }
     
-        console.log("Attempting to start timer with minutes:", minutes);
         chrome.runtime.sendMessage({ 
             action: "startTimer", 
             minutes: minutes 
         }, (response) => {
             if (!response || !response.success) {
                 timerMessage.textContent = "Failed to start timer";
-                console.log("Failed to start timer", response);
                 return;
             }
     
             // Timer started successfully
-            console.log("Timer started successfully. Response:", response);
             timerActive = true;
             timerEndTime = response.timerEndTime;
     
             // Force extension to Enabled because focus mode started
             chrome.storage.sync.set({ enabled: true });
-
-            // NEW: Don't auto-init game - wait until user tries to remove URL
-            if (window.gameController && window.gameController.stopGame) {
-                window.gameController.stopGame();
-            }
     
             // Update UI
             startTimerCountdown(timerEndTime);
@@ -174,9 +135,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // Initialization logic
     function initializePopup() {
         chrome.storage.sync.get(["enabled", "blockedUrls"], (data) => {
-            // Set initial switch state based on timer state
-            toggleSwitch.checked = timerActive;
-            statusText.textContent = timerActive ? "Enabled" : "Disabled";
+            toggleSwitch.checked = data.enabled === true;  
+            statusText.textContent = toggleSwitch.checked ? "Enabled" : "Disabled";
             updateUrlList(data.blockedUrls || []);
         });
     
@@ -219,7 +179,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
     
-
     function updateTimerPreview() {
         const minutes = parseInt(timerMinutes.value) || 0;
         const displayMinutes = String(minutes).padStart(2, '0');
@@ -238,19 +197,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 countdownInterval = null;
                 timerActive = false;
 
-                // Turn off the switch when timer ends
-                toggleSwitch.checked = false;
-                statusText.textContent = "Disabled";
-
-                // Reset timer display and controls
                 resetTimerDisplay();
                 setTimerControlsState(true);
                 setUrlVisibilityMode(false);
-
-                // Stop the game if it's running
-                if (window.gameController && window.gameController.stopGame) {
-                    window.gameController.stopGame();
-                }
 
                 timerMessage.textContent = "Focus session complete!";
                 setTimeout(() => { timerMessage.textContent = ""; }, 3000);
@@ -267,10 +216,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const timeLeft = endTime - now;
         if (timeLeft <= 0) {
             timerDisplay.textContent = "00:00";
-
-            if (window.gameController && window.gameController.stopGame) {
-                window.gameController.stopGame();
-            }
 
             window.dispatchEvent(new CustomEvent('focus-mode-changed', { 
                 detail: { active: false } 
@@ -292,37 +237,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function setTimerControlsState(enabled) {
-        console.log("setTimerControlsState called with enabled:", enabled);
         timerMinutes.disabled = !enabled;
         startTimerBtn.disabled = !enabled;
-        
-        const timerForm = document.querySelector('.timer-form');
-
-        if (timerForm) {
-            if (enabled) {
-                // Timer is inactive: Show timer input and start button, hide stop button.
-                console.log("Setting controls for inactive timer");
-                timerMinutes.style.display = 'block';
-                startTimerBtn.style.display = 'block';
-                stopTimerBtn.style.display = 'none';
-                timerForm.classList.remove('timer-active');
-            } else {
-                // Timer is active: Hide timer input and start button, show stop button.
-                console.log("Setting controls for active timer");
-                timerMinutes.style.display = 'none';
-                startTimerBtn.style.display = 'none';
-                stopTimerBtn.style.display = 'block';
-                timerForm.classList.add('timer-active');
-            }
-        }
         
         // Update logo position based on timer state
         updateLogoPosition(!enabled);
     
-        // Keep timerMessage logic related to timer state
+        // Update switch state based on timer - purely visual now
+        toggleSwitch.disabled = true; // Always disabled
+        toggleSwitch.checked = !enabled; // On when timer is active
         if (!enabled) {
-            timerMessage.textContent = "Focus mode active - can't disable";
+            toggleSwitch.style.opacity = "1";
+            toggleSwitch.style.cursor = "default";
+            timerMessage.textContent = "Focus mode active";
         } else {
+            toggleSwitch.style.opacity = "1";
+            toggleSwitch.style.cursor = "default";
             timerMessage.textContent = "";
         }
     }
@@ -447,25 +377,11 @@ document.addEventListener("DOMContentLoaded", () => {
             removeBtn.title = "Remove";
     
             if (timerActive) {
-                // NEW: During active timer, don't disable button but make it trigger game instead
-                removeBtn.style.opacity = "1"; // Make it fully visible
-                removeBtn.title = "Challenge the timer!";
-                
-                // Add click event that ONLY triggers the game instead of removing URL
-                removeBtn.addEventListener("click", (event) => {
-                    event.stopPropagation();
-                    if (window.gameController && window.gameController.initGame) {
-                        window.gameController.initGame();
-                        // Scroll to the game container
-                        if (gameContainer) {
-                            gameContainer.scrollIntoView({ behavior: 'smooth' });
-                        }
-                        
-                        // Show explanation message
-                        timerMessage.textContent = "Score a point to end focus mode!";
-                        setTimeout(() => { timerMessage.textContent = ""; }, 3000);
-                    }
-                });
+                // During timer, show disabled remove button
+                removeBtn.style.opacity = "0.5";
+                removeBtn.style.cursor = "not-allowed";
+                removeBtn.title = "Cannot remove during focus mode";
+                removeBtn.disabled = true;
             } else {
                 // Normal behavior when timer is not active
                 removeBtn.addEventListener("click", () => {
@@ -479,5 +395,4 @@ document.addEventListener("DOMContentLoaded", () => {
             urlList.appendChild(li);
         });
     }
-    
 });

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Tab Sniper",
-  "version": "1.0",
-  "description": "Stay focused by blocking distracting websites during study or work sessions. Features a customizable timer and a mini-game to earn back access to blocked sites.",
+  "version": "1.0.0",
+  "description": "Boost productivity by blocking distracting websites during focus sessions. Features a customizable timer and website blocker.",
   "permissions": ["storage", "tabs", "webNavigation"],
   "background": {
     "service_worker": "background.js"
@@ -16,6 +16,12 @@
       "128": "icon_sleep.png"
     }
   },
-  "homepage_url": "https://github.com/lnanduri2005/Tab-Sniper-Extension",
-  "author": "Likitha Nanduri, Abhigna Nimmagadda, Parikshith Venkataraghavan"
+  "icons": {
+    "16": "icon_sleep.png",
+    "48": "icon_sleep.png",
+    "128": "icon_sleep.png"
+  },
+  "author": "Likitha Nanduri, Abhigna Nimmagadda, and Parikshith Venkataraghavan",
+  "homepage_url": "https://github.com/yourusername/tab-sniper",
+  "minimum_chrome_version": "88"
 }
