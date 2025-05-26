@@ -32,17 +32,19 @@ A Chrome extension that helps you stay focused by blocking distracting websites 
 
 ## 🔧 Development
 
-### Recent Changes
-- Removed mini-game functionality for a more streamlined experience
-- Improved URL blocking reliability
-- Added smooth animations for better user experience
-- Enhanced visual feedback during focus mode
-
 ### Technical Details
 - Built with vanilla JavaScript
 - Uses Chrome Extension APIs
 - Implements Chrome Storage for persistence
 - Features responsive design
+
+### Future Developments
+
+- Mini-game feature to make focus sessions more engaging
+- Statistics tracking for focus sessions and productivity
+- Custom themes and visual customization options
+- Integration with popular productivity tools
+- Mobile companion app for cross-device synchronization
 
 ## 🤝 Contributing
 
