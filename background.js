@@ -1,4 +1,4 @@
-let enabled = true;
+let enabled = false;
 let timerActive = false;
 let timerEndTime = 0;
 
@@ -11,21 +11,30 @@ chrome.storage.sync.get(["enabled", "timerActive", "timerEndTime"], (data) => {
     // Check if timer should still be active
     if (timerActive && Date.now() >= timerEndTime) {
         timerActive = false;
-        chrome.storage.sync.set({ timerActive: false });
+        enabled = false; // Also disable when timer expires
+        chrome.storage.sync.set({ 
+            timerActive: false,
+            enabled: false 
+        });
     }
     
-    // Set initial icon
+    // Force immediate icon update
     updateIcon();
+    
+    // Double check icon after a short delay
+    setTimeout(updateIcon, 100);
     
     console.log("Initial state loaded:", { enabled, timerActive, timerEndTime });
 });
 
 function updateIcon() {
+    // Force immediate icon update
     if (enabled) {
-        chrome.action.setIcon({path: "icon_mischiveous.png"})
-    }
-    else {
-        chrome.action.setIcon({ path: "icon_sleep.png" });
+        chrome.action.setIcon({path: "icon_mischiveous.png"});
+        console.log("Setting mischievous icon - extension is enabled");
+    } else {
+        chrome.action.setIcon({path: "icon_sleep.png"});
+        console.log("Setting sleep icon - extension is disabled");
     }
 }
 
@@ -33,8 +42,23 @@ function updateIcon() {
 function checkTimerExpired() {
     if (timerActive && Date.now() >= timerEndTime) {
         timerActive = false;
-        chrome.storage.sync.set({ timerActive: false });
-        console.log("Timer expired, no longer blocking URLs");
+        enabled = false; // Disable extension when timer ends
+        chrome.storage.sync.set({ 
+            timerActive: false,
+            enabled: false 
+        });
+        console.log("Timer expired - disabling extension and allowing all sites");
+        updateIcon();
+        
+        // Show notification when timer ends
+        chrome.notifications.create('timer-end', {
+            type: 'basic',
+            iconUrl: 'icon_mischiveous.png',
+            title: 'Focus Session complete! YAY! 🎉',
+            message: 'Your focus session has ended. You can now access all sites.',
+            priority: 2
+        });
+        
         return true;
     }
     return false;
@@ -45,77 +69,64 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
     // Only process main frame navigations (not iframes)
     if (details.frameId !== 0) return;
     
-    // Check if timer has expired before blocking
-    checkTimerExpired();
-    
-    // Check if extension is enabled and timer is active
-    if (!enabled || !timerActive) {
-        console.log("Not blocking navigation: Extension disabled or timer not active", {
-            enabled,
-            timerActive,
-            url: details.url
-        });
+    // Check if timer has expired
+    if (checkTimerExpired()) {
+        console.log("Timer expired - allowing navigation to:", details.url);
         return;
     }
     
-    console.log("Checking navigation URL:", details.url);
-    
-    chrome.storage.sync.get("blockedUrls", (data) => {
-        const blockedUrls = data.blockedUrls || [];
-        console.log("Checking against blocked URLs:", blockedUrls);
-        
-        // Check if URL contains any of the blocked URLs
-        if (blockedUrls.some(url => details.url.includes(url))) {
-            console.log("Blocking navigation to:", details.url);
-            // Cancel the navigation by removing the tab
-            chrome.tabs.remove(details.tabId).catch(error => {
-                // Ignore errors if tab doesn't exist
-                if (!error.message.includes("No tab with id")) {
-                    console.error("Error removing tab:", error);
-                }
-            });
-        } else {
-            console.log("Navigation allowed:", details.url);
-        }
-    });
+    // Only block if either enabled OR timer is active
+    if (enabled || timerActive) {
+        chrome.storage.sync.get("blockedUrls", (data) => {
+            const blockedUrls = data.blockedUrls || [];
+            if (blockedUrls.some(url => details.url.includes(url))) {
+                console.log("Blocking navigation to:", details.url);
+                chrome.tabs.remove(details.tabId).catch(error => {
+                    if (!error.message.includes("No tab with id")) {
+                        console.error("Error removing tab:", error);
+                    }
+                });
+            } else {
+                console.log("Navigation allowed:", details.url);
+            }
+        });
+    } else {
+        console.log("Navigation allowed - extension not blocking:", details.url);
+    }
 });
 
-// Also keep the tabs.onUpdated listener for cases where tabs change URLs without navigation
+// Handle tab updates
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     // Skip if no URL change
     if (!changeInfo.url) return;
     
-    // Check if timer has expired before blocking
-    checkTimerExpired();
-    
-    // Check if extension is enabled and timer is active
-    if (!enabled || !timerActive) {
-        console.log("Not blocking tab update: Extension disabled or timer not active", {
-            enabled,
-            timerActive,
-            url: changeInfo.url
-        });
+    // Check if timer has expired
+    if (checkTimerExpired()) {
+        console.log("Timer expired - allowing tab update to:", changeInfo.url);
         return;
     }
     
-    console.log("Checking updated URL:", changeInfo.url);
-    
-    chrome.storage.sync.get("blockedUrls", (data) => {
-        const blockedUrls = data.blockedUrls || [];
-        
-        // Check if URL contains any of the blocked URLs
-        if (blockedUrls.some(url => changeInfo.url.includes(url))) {
-            console.log("Blocking updated URL:", changeInfo.url);
-            chrome.tabs.remove(tabId).catch(error => {
-                // Ignore errors if tab doesn't exist
-                if (!error.message.includes("No tab with id")) {
-                    console.error("Error removing tab:", error);
-                }
-            });
-        }
-    });
+    // Only block if either enabled OR timer is active
+    if (enabled || timerActive) {
+        chrome.storage.sync.get("blockedUrls", (data) => {
+            const blockedUrls = data.blockedUrls || [];
+            if (blockedUrls.some(url => changeInfo.url.includes(url))) {
+                console.log("Blocking tab update to:", changeInfo.url);
+                chrome.tabs.remove(tabId).catch(error => {
+                    if (!error.message.includes("No tab with id")) {
+                        console.error("Error removing tab:", error);
+                    }
+                });
+            } else {
+                console.log("Tab update allowed:", changeInfo.url);
+            }
+        });
+    } else {
+        console.log("Tab update allowed - extension not blocking:", changeInfo.url);
+    }
 });
 
+// Handle messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log("Message received:", request);
 
@@ -123,12 +134,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "toggle") {
         if (!timerActive) {
             enabled = request.enabled;
-            chrome.storage.sync.set({ enabled: enabled });
+            // Force immediate icon update
             updateIcon();
+            // Then update storage
+            chrome.storage.sync.set({ enabled: enabled }, () => {
+                // Double check icon after storage update
+                setTimeout(updateIcon, 100);
+            });
             console.log("Toggle state changed:", enabled);
+            
+            // If enabled, check and close existing blocked tabs
+            if (enabled) {
+                checkAllOpenTabs();
+            }
         }
         sendResponse({ enabled: enabled, timerActive: timerActive });
-    } 
+    }
+    // Handle notification request
+    else if (request.action === "showNotification") {
+        chrome.notifications.create('timer-end', {
+            type: 'basic',
+            iconUrl: 'icon_mischiveous.png',
+            title: request.title,
+            message: request.message,
+            priority: 2
+        });
+        sendResponse({ success: true });
+    }
     // Handle URL updates
     else if (request.action === "updateUrls") {
         chrome.storage.sync.set({ blockedUrls: request.urls });
@@ -159,6 +191,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         console.log("Timer started:", { timerActive, timerEndTime, enabled });
         updateIcon();
         
+        // Show notification when timer starts
+        chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'icon_mischiveous.png',
+            title: 'Focus Session Started! 🎯',
+            message: `Focus mode activated for ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}. You can do it!`,
+            priority: 2
+        });
+        
         // Important: Also check all current tabs when timer starts
         checkAllOpenTabs();
         
@@ -173,15 +214,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Update timer state if needed
         if (timerActive && Date.now() >= timerEndTime) {
             timerActive = false;
-            chrome.storage.sync.set({ timerActive: false });
-            console.log("Timer expired, updated state:", { timerActive });
+            enabled = false; // Disable extension when timer ends
+            chrome.storage.sync.set({ 
+                timerActive: false,
+                enabled: false 
+            });
+            console.log("Timer expired - disabling extension and allowing all sites");
+            updateIcon();
+            
+            // Show notification when timer ends
+            chrome.notifications.create('timer-end', {
+                type: 'basic',
+                iconUrl: 'icon_mischiveous.png',
+                title: 'Focus Session complete! YAY! 🎉',
+                message: 'Your focus session has ended. You can now access all sites.',
+                priority: 2
+            });
         }
         
         sendResponse({
             enabled: enabled,
             timerActive: timerActive,
             timerEndTime: timerEndTime,
-            currentTime: Date.now() // Send current time to help with sync
+            currentTime: Date.now()
         });
     }
     // Handle explicit timer expiration
@@ -250,9 +305,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Keep channel open for async response
 });
 
-// Function to check all open tabs when timer starts
+// Function to check all open tabs
 function checkAllOpenTabs() {
-    if (!enabled || !timerActive) return;
+    // Only check tabs if either enabled or timer is active
+    if (!enabled && !timerActive) {
+        console.log("Extension disabled and no timer - not checking tabs");
+        return;
+    }
     
     chrome.tabs.query({}, (tabs) => {
         chrome.storage.sync.get("blockedUrls", (data) => {
@@ -262,7 +321,6 @@ function checkAllOpenTabs() {
                 if (tab.url && blockedUrls.some(url => tab.url.includes(url))) {
                     console.log("Blocking existing tab:", tab.url);
                     chrome.tabs.remove(tab.id).catch(error => {
-                        // Ignore errors if tab doesn't exist
                         if (!error.message.includes("No tab with id")) {
                             console.error("Error removing tab:", error);
                         }
@@ -282,10 +340,16 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
             enabled = changes.enabled.newValue;
             console.log("Enabled state updated:", enabled);
             updateIcon();
+            
+            // If enabled, check and close existing blocked tabs
+            if (enabled) {
+                checkAllOpenTabs();
+            }
         }
         if (changes.timerActive !== undefined) {
             timerActive = changes.timerActive.newValue;
             console.log("Timer active state updated:", timerActive);
+            updateIcon();
             
             // If timer becomes active, check all open tabs
             if (timerActive) {
