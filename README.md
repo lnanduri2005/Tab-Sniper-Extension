@@ -49,6 +49,7 @@ A Chrome extension that helps you stay focused by blocking distracting websites 
 ## 🤝 Contributing
 
 Feel free to submit issues and enhancement requests!
+OG Developers: Likitha Nanduri, Parikshith Venkataraghavan, and Abhigna Nimmagadda
 
 ## 📝 License
 
