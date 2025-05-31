@@ -1,6 +1,7 @@
 # Tab Sniper 🎯
 
 A Chrome extension that helps you stay focused by blocking distracting websites during your focus sessions. Perfect for students, professionals, and anyone who wants to maintain productivity.
+https://chromewebstore.google.com/detail/tab-sniper/ehdaobjgkeigecnmmdokmbkgkclnlgop
 
 ## ✨ Features
 
