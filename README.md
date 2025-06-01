@@ -1,9 +1,9 @@
-# Tab Sniper 🎯
+# Tab Sniper 
 
 A Chrome extension that helps you stay focused by blocking distracting websites during your focus sessions. Perfect for students, professionals, and anyone who wants to maintain productivity.
 https://chromewebstore.google.com/detail/tab-sniper/ehdaobjgkeigecnmmdokmbkgkclnlgop
 
-## ✨ Features
+## Features
 
 - **Focus Timer**: Set custom focus sessions with a countdown timer
 - **Website Blocking**: Block distracting websites during focus sessions
@@ -11,7 +11,7 @@ https://chromewebstore.google.com/detail/tab-sniper/ehdaobjgkeigecnmmdokmbkgkcln
 - **Easy Management**: Simple interface to add and remove blocked websites
 - **Persistent Settings**: Your blocked websites list is saved across sessions
 
-## 🚀 How to Use
+## How to Use
 
 1. **Install the Extension**
    - Download from the Chrome Web Store
@@ -47,7 +47,7 @@ https://chromewebstore.google.com/detail/tab-sniper/ehdaobjgkeigecnmmdokmbkgkcln
 - Integration with popular productivity tools
 - Mobile companion app for cross-device synchronization
 
-## 🤝 Contributing
+## Contributing
 
 Feel free to submit issues and enhancement requests!
 OG Developers: Likitha Nanduri, Parikshith Venkataraghavan, and Abhigna Nimmagadda
