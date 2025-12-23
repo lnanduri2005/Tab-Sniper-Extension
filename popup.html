@@ -8,54 +8,104 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <h1>Tab Sniper</h1>
-
-        <div id="logo-container" class="centered-logo">
-            <img src="icon_mischiveous.png" id="app-logo" alt="Tab Sniper Logo">
+    <div class="header">
+        <div class="header-left">
+            <img src="icon_mischiveous.png" class="logo" id="app-logo" alt="Tab Sniper Logo">
+            <div class="title">Tab Sniper</div>
         </div>
-        
-        <!-- Toggle Section -->
         <div class="toggle-wrapper">
-            <span id="statusText">Enabled</span>
+            <span class="toggle-label" id="status-text">OFF</span>
             <label class="switch">
-                <input type="checkbox" id="toggleSwitch" checked>
+                <input type="checkbox" id="toggle-switch">
                 <span class="slider"></span>
             </label>
         </div>
+    </div>
+
+    <div class="tabs">
+        <button class="tab active" data-tab="focus">Focus</button>
+        <button class="tab" data-tab="sites">Blocked Sites</button>
+        <button class="tab" data-tab="stats">Stats</button>
+        <button class="tab" data-tab="history">History</button>
+    </div>
+
+    <!-- FOCUS TAB -->
+    <div class="tab-content active" id="focus-tab">
+        <div id="timer-display" class="timer-display">00:00</div>
         
-        <!-- Timer Box -->
-        <div class="timer-box">
-            <h2>Focus Timer</h2>
-            <div id="timer-display">00:00</div>
-            
-            <div class="timer-form">
-                <div class="time-input">
-                    <input type="number" id="timer-minutes" min="1" max="120" value="25">
-                    <span>minutes</span>
-                </div>
-                <button id="start-timer-btn">Start Focus Mode</button>
-            </div>
-            <div id="timer-message" class="message"></div>
+        <div class="timer-input-group">
+            <input type="number" id="timer-minutes" min="1" max="120" value="25">
+            <span>minutes</span>
         </div>
+
+        <button class="btn-primary" id="start-timer-btn">Start Focus Session</button>
+        <button class="btn-primary" id="save-focus-btn" style="background: var(--accent); margin-top: 8px;">Save as Preset</button>
         
-        <!-- URL Box -->
-        <div class="url-box" id="url-management">
-            <h2>Blocked Sites</h2>
-            
-            <!-- This button will show during focus mode -->
-            <button id="show-urls-btn" class="peek-btn" style="display: none;">Show Blocked Sites</button>
-            
-            <!-- URL List Container (hidden during focus mode) -->
-            <div id="url-list-container">
-                <div class="url-form">
-                    <input type="text" id="urlInput" placeholder="Enter website to block">
-                    <button id="addUrl">Add</button>
-                </div>
-                <ul id="urlList"></ul>
+        <div class="message" id="timer-message"></div>
+
+        <div class="section" style="margin-top: 24px;">
+            <div class="section-title">Sites to Block</div>
+            <div class="input-group">
+                <input type="text" id="url-input-focus" placeholder="reddit.com">
+                <button class="btn-secondary" id="add-url-btn-focus">Add</button>
             </div>
+            <ul id="url-list-focus" class="list" style="margin-top: 12px; max-height: 150px; overflow-y: auto;"></ul>
+        </div>
+
+        <div class="section" style="margin-top: 20px;">
+            <div class="section-title">Quick Start Presets</div>
+            <div id="preset-list" class="list"></div>
         </div>
     </div>
+
+    <!-- BLOCKED SITES TAB -->
+    <div class="tab-content" id="sites-tab">
+        <div class="section">
+            <div class="section-title">Add Site to Block</div>
+            <div class="input-group">
+                <input type="text" id="url-input" placeholder="reddit.com">
+                <button class="btn-secondary" id="add-url-btn">Add</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Currently Blocked</div>
+            <ul id="url-list" class="list"></ul>
+        </div>
+    </div>
+
+    <!-- STATS TAB -->
+    <div class="tab-content" id="stats-tab">
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="total-sessions">0</div>
+                <div class="stat-label">Sessions This Week</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-minutes">0</div>
+                <div class="stat-label">Minutes Focused</div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-title">Focus Time This Week</div>
+            <div class="bar-chart" id="weekly-chart"></div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-title">Most Blocked Sites</div>
+            <div class="blocked-sites-list" id="blocked-stats"></div>
+        </div>
+    </div>
+
+    <!-- HISTORY TAB -->
+    <div class="tab-content" id="history-tab">
+        <div class="section">
+            <div class="section-title">Recent Focus Sessions</div>
+            <div id="history-list" class="list"></div>
+        </div>
+    </div>
+
     <script src="popup.js"></script>
 </body>
 </html>

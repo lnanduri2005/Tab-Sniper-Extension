@@ -1,274 +1,170 @@
 document.addEventListener("DOMContentLoaded", () => {
+    // State
+    let enabled = false;
+    let timerActive = false;
+    let timerEndTime = 0;
+    let focusDurationMinutes = 0;
+    let countdownInterval = null;
+    let presets = [];
+    let history = [];
+    let stats = {
+        dailyMinutes: [0, 0, 0, 0, 0, 0, 0],
+        blockedSites: {}
+    };
+    let blockedUrls = [];
+
     // DOM Elements
-    const toggleSwitch = document.getElementById("toggleSwitch");
-    const statusText = document.getElementById("statusText");
-    const urlList = document.getElementById("urlList");
-    const urlInput = document.getElementById("urlInput");
-    const addUrlBtn = document.getElementById("addUrl");
+    const toggleSwitch = document.getElementById("toggle-switch");
+    const statusText = document.getElementById("status-text");
     const timerDisplay = document.getElementById("timer-display");
     const timerMinutes = document.getElementById("timer-minutes");
     const startTimerBtn = document.getElementById("start-timer-btn");
+    const saveFocusBtn = document.getElementById("save-focus-btn");
     const timerMessage = document.getElementById("timer-message");
-    const showUrlsBtn = document.getElementById("show-urls-btn");
-    const urlListContainer = document.getElementById("url-list-container");
-    const disableConfirm = document.getElementById("disableConfirm");
-    const confirmDisableBtn = document.getElementById("confirmDisableBtn");
-    
-    // Timer variables
-    let countdownInterval = null;
-    let timerActive = false;
-    let timerEndTime = 0;
-    
-    // URL visibility variables
-    let urlHideTimeout = null;
-    let urlCountdownInterval = null;
-    let secondsRemaining = 15;
-    let countdownElement = null;
-    
-    // Initialize the popup
-    initializePopup();
-    
-    // Add event listeners
-    timerMinutes.addEventListener("input", updateTimerPreview);
-    addUrlBtn.addEventListener("click", addUrlToBlockList);
-    urlInput.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") addUrlToBlockList();
-    });
-    showUrlsBtn.addEventListener("click", toggleUrlVisibility);
+    const urlInput = document.getElementById("url-input");
+    const addUrlBtn = document.getElementById("add-url-btn");
+    const urlList = document.getElementById("url-list");
+    const urlInputFocus = document.getElementById("url-input-focus");
+    const addUrlBtnFocus = document.getElementById("add-url-btn-focus");
+    const urlListFocus = document.getElementById("url-list-focus");
+    const presetList = document.getElementById("preset-list");
+    const appLogo = document.getElementById("app-logo");
+    const weeklyChart = document.getElementById("weekly-chart");
+    const blockedStats = document.getElementById("blocked-stats");
+    const historyList = document.getElementById("history-list");
 
-    // Add event listener for the toggle switch
-    toggleSwitch.addEventListener("change", () => {
-        if (timerActive) {
-            // If timer is active, prevent toggle
-            toggleSwitch.checked = true;
-            return;
-        }
+    // Tab Navigation
+    document.querySelectorAll(".tab").forEach(tab => {
+        tab.addEventListener("click", () => {
+            document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+            document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
 
-        // Force immediate icon update
-        updateIcon(toggleSwitch.checked);
-        statusText.textContent = toggleSwitch.checked ? "Enabled" : "Disabled";
+            tab.classList.add("active");
+            document.getElementById(`${tab.dataset.tab}-tab`).classList.add("active");
 
-        // Then send message to background
-        chrome.runtime.sendMessage({ 
-            action: "toggle", 
-            enabled: toggleSwitch.checked 
-        }, (response) => {
-            if (!response) return;
-            
-            // Force update the enabled state in storage
-            chrome.storage.sync.set({ enabled: response.enabled }, () => {
-                // Double check icon after storage update
-                setTimeout(() => updateIcon(response.enabled), 100);
-                
-                // Immediately update URL list to reflect new state
-                chrome.storage.sync.get("blockedUrls", (data) => {
-                    updateUrlList(data.blockedUrls || []);
-                });
-            });
-            
-            // Update UI based on new state
-            if (!response.enabled) {
-                setUrlVisibilityMode(false);
-                updateLogoPosition(false);
+            if (tab.dataset.tab === "stats") {
+                renderStats();
             }
         });
     });
 
-    startTimerBtn.addEventListener("click", () => {
-        const minutes = parseInt(timerMinutes.value);
-    
-        if (isNaN(minutes) || minutes < 1) {
-            timerMessage.textContent = "Please enter a valid time";
+    // Initialize
+    init();
+
+    function init() {
+        loadFromStorage();
+
+        toggleSwitch.addEventListener("change", handleToggle);
+        startTimerBtn.addEventListener("click", () => startFocusSession());
+        saveFocusBtn.addEventListener("click", saveCurrentAsPreset);
+        addUrlBtn.addEventListener("click", addBlockedSite);
+        addUrlBtnFocus.addEventListener("click", addBlockedSiteFocus);
+        urlInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") addBlockedSite();
+        });
+        urlInputFocus.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") addBlockedSiteFocus();
+        });
+        timerMinutes.addEventListener("input", updateTimerPreview);
+
+        updateTimerPreview();
+    }
+
+    function loadFromStorage() {
+        chrome.runtime.sendMessage({ action: "getTimerState" }, (response) => {
+            if (!response) return;
+
+            enabled = response.enabled;
+            timerActive = response.timerActive;
+            timerEndTime = response.timerEndTime;
+            focusDurationMinutes = response.timerDurationMinutes || 0;
+
+            toggleSwitch.checked = enabled;
+            statusText.textContent = enabled ? "ON" : "OFF";
+            updateIcon(enabled);
+
+            if (timerActive && response.timerEndTime > response.currentTime) {
+                startTimerCountdown(response.timerEndTime);
+            } else {
+                timerActive = false;
+                updateTimerPreview();
+            }
+        });
+
+        chrome.storage.sync.get(["blockedUrls", "presets", "history", "stats"], (data) => {
+            blockedUrls = data.blockedUrls || [];
+            presets = data.presets || [];
+            history = data.history || [];
+            stats = data.stats || { dailyMinutes: [0, 0, 0, 0, 0, 0, 0], blockedSites: {} };
+
+            // Ensure stats shape is intact
+            if (!Array.isArray(stats.dailyMinutes) || stats.dailyMinutes.length !== 7) {
+                stats.dailyMinutes = [0, 0, 0, 0, 0, 0, 0];
+            }
+            if (!stats.blockedSites) stats.blockedSites = {};
+
+            renderUrlList(blockedUrls);
+            renderUrlListFocus(blockedUrls);
+            renderPresets();
+            renderHistory();
+        });
+    }
+
+    function handleToggle() {
+        if (timerActive) {
+            toggleSwitch.checked = true;
             return;
         }
-    
-        chrome.runtime.sendMessage({ 
-            action: "startTimer", 
-            minutes: minutes 
+
+        enabled = toggleSwitch.checked;
+        statusText.textContent = enabled ? "ON" : "OFF";
+        updateIcon(enabled);
+
+        chrome.runtime.sendMessage({
+            action: "toggle",
+            enabled: enabled
+        });
+    }
+
+    function startFocusSession(presetMinutes = null) {
+        const minutes = presetMinutes || parseInt(timerMinutes.value);
+        if (isNaN(minutes) || minutes < 1) {
+            timerMessage.textContent = "Enter valid time";
+            return;
+        }
+
+        chrome.runtime.sendMessage({
+            action: "startTimer",
+            minutes: minutes
         }, (response) => {
             if (!response || !response.success) {
-                timerMessage.textContent = "Failed to start timer";
+                timerMessage.textContent = "Failed to start";
                 return;
             }
-    
-            // Timer started successfully
+
             timerActive = true;
             timerEndTime = response.timerEndTime;
-    
-            // Force extension to Enabled because focus mode started
-            chrome.storage.sync.set({ enabled: true });
-    
-            // Update UI
-            startTimerCountdown(timerEndTime);
-            setTimerControlsState(false);
+            focusDurationMinutes = response.timerDurationMinutes || minutes;
+            enabled = true;
+
             toggleSwitch.checked = true;
-            statusText.textContent = "Enabled";
-            updateLogoPosition(true);
-    
-            // Hide URL list and show button in focus mode
-            setUrlVisibilityMode(true);
-    
-            chrome.storage.sync.get("blockedUrls", (data) => {
-                updateUrlList(data.blockedUrls || []);
-            });
-    
+            statusText.textContent = "ON";
+            updateIcon(true);
+
+            startTimerCountdown(timerEndTime);
+
+            const session = {
+                date: new Date().toISOString(),
+                duration: minutes,
+                completed: false,
+                blockedSnapshot: [...blockedUrls]
+            };
+            history.unshift(session);
+            chrome.storage.sync.set({ history });
+
             timerMessage.textContent = "Focus mode activated!";
             setTimeout(() => { timerMessage.textContent = ""; }, 2000);
         });
-    });
-    
-    // Handle "okay close fr" button click if it exists
-    if (confirmDisableBtn) {
-        confirmDisableBtn.addEventListener("click", () => {
-            chrome.runtime.sendMessage({ 
-                action: "toggle", 
-                enabled: false
-            }, (response) => {
-                if (!response) return;
-        
-                // Actually disable now
-                toggleSwitch.checked = false;
-                statusText.textContent = response.enabled ? "Enabled" : "Disabled";
-        
-                // Hide the confirmation div
-                if (disableConfirm) {
-                    disableConfirm.classList.add("hidden");
-                    disableConfirm.classList.remove("visible");
-                }
-        
-                // Disable the "okay close fr" button
-                confirmDisableBtn.disabled = true;
-                confirmDisableBtn.style.opacity = "0.5";
-                confirmDisableBtn.style.cursor = "not-allowed";
-        
-                // Stop the timer completely
-                if (countdownInterval) {
-                    clearInterval(countdownInterval);
-                    countdownInterval = null;
-                }
-                timerActive = false;
-        
-                // Reset timer display to normal input
-                resetTimerDisplay();
-                setTimerControlsState(true);
-        
-                // Force unlock tabs (unblock sites) by resetting "blockedUrls" if needed
-                chrome.storage.sync.set({ enabled: false });
-        
-                // Make sure URL list and remove buttons are back to normal
-                setUrlVisibilityMode(false);
-                chrome.storage.sync.get("blockedUrls", (data) => {
-                    updateUrlList(data.blockedUrls || []);
-                });
-        
-                // Clear focus mode message
-                timerMessage.textContent = "Focus mode canceled.";
-                setTimeout(() => { timerMessage.textContent = ""; }, 3000);
-            });
-        });
-    }
-
-    // Initialization logic
-    function initializePopup() {
-        // Get both enabled state and timer state
-        chrome.runtime.sendMessage({ action: "getTimerState" }, (response) => {
-            if (!response) return;
-            
-            // Update timer state
-            timerActive = response.timerActive;
-            timerEndTime = response.timerEndTime;
-            
-            // Update switch state based on enabled state
-            toggleSwitch.checked = response.enabled;
-            statusText.textContent = response.enabled ? "Enabled" : "Disabled";
-            
-            // Double check enabled state from storage
-            chrome.storage.sync.get("enabled", (data) => {
-                const isEnabled = data.enabled;
-                updateIcon(isEnabled);
-                
-                // Update UI based on timer state
-                if (timerActive && response.timerEndTime > response.currentTime) {
-                    startTimerCountdown(response.timerEndTime);
-                    setTimerControlsState(false);
-                    setUrlVisibilityMode(true);
-                    updateLogoPosition(true);
-                } else {
-                    resetTimerDisplay();
-                    setTimerControlsState(true);
-                    setUrlVisibilityMode(false);
-                    updateLogoPosition(false);
-                }
-                
-                // Update URL list
-                chrome.storage.sync.get("blockedUrls", (data) => {
-                    updateUrlList(data.blockedUrls || []);
-                });
-            });
-        });
-    
-        urlListContainer.addEventListener("mousedown", resetUrlTimeout);
-        urlListContainer.addEventListener("mousemove", resetUrlTimeout);
-        urlListContainer.addEventListener("keydown", resetUrlTimeout);
-    }
-
-    function updateLogoPosition(timerActive) {
-        const logoContainer = document.getElementById('logo-container');
-        const appLogo = document.getElementById('app-logo');
-        
-        // Get current enabled state
-        chrome.storage.sync.get("enabled", (data) => {
-            const isEnabled = data.enabled;
-            
-            if (timerActive) {
-                // Only move to corner during timer mode
-                logoContainer.classList.remove('centered-logo');
-                logoContainer.classList.add('corner-logo');
-                appLogo.src = 'icon_mischiveous.png';
-            } else {
-                // Always center the logo
-                logoContainer.classList.remove('corner-logo');
-                logoContainer.classList.add('centered-logo');
-                // Show mischievous if enabled, sleep if disabled
-                appLogo.src = isEnabled ? 'icon_mischiveous.png' : 'icon_sleep.png';
-            }
-        });
-    }
-    
-    function checkTimerState() {
-        chrome.runtime.sendMessage({ action: "getTimerState" }, (response) => {
-            if (!response) return;
-            timerActive = response.timerActive;
-            timerEndTime = response.timerEndTime;
-    
-            if (timerActive && response.timerEndTime > response.currentTime) {
-                startTimerCountdown(response.timerEndTime);
-                setTimerControlsState(false);
-                toggleSwitch.checked = true;
-                statusText.textContent = "Enabled";
-                updateIcon(true);
-                setUrlVisibilityMode(true);
-                updateLogoPosition(true);
-            } else {
-                // Timer is not active or has expired
-                resetTimerDisplay();
-                setTimerControlsState(true);
-                toggleSwitch.checked = false; // Ensure switch is off
-                statusText.textContent = "Disabled";
-                updateIcon(false);
-                setUrlVisibilityMode(false);
-                updateLogoPosition(false);
-                
-                // Update storage to reflect disabled state
-                chrome.storage.sync.set({ enabled: false });
-            }
-        });
-    }
-    
-    function updateTimerPreview() {
-        const minutes = parseInt(timerMinutes.value) || 0;
-        const displayMinutes = String(minutes).padStart(2, '0');
-        timerDisplay.textContent = `${displayMinutes}:00`;
     }
 
     function startTimerCountdown(endTime) {
@@ -281,18 +177,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!stillActive) {
                 clearInterval(countdownInterval);
                 countdownInterval = null;
-                timerActive = false;
-
-                resetTimerDisplay();
-                setTimerControlsState(true);
-                setUrlVisibilityMode(false);
-
-                timerMessage.textContent = "Focus session complete!";
-                setTimeout(() => { timerMessage.textContent = ""; }, 3000);
-
-                chrome.storage.sync.get("blockedUrls", (data) => {
-                    updateUrlList(data.blockedUrls || []);
-                });
+                onTimerComplete();
             }
         }, 1000);
     }
@@ -300,238 +185,325 @@ document.addEventListener("DOMContentLoaded", () => {
     function updateCountdown(endTime) {
         const now = Date.now();
         const timeLeft = endTime - now;
-        
+
         if (timeLeft <= 0) {
-            // Timer has ended
             timerDisplay.textContent = "00:00";
-            timerActive = false;
-            
-            // Get the original timer duration from the input field
-            const originalMinutes = parseInt(timerMinutes.value) || 1;
-            
-            // Disable the switch and update UI
-            toggleSwitch.checked = false;
-            statusText.textContent = "Disabled";
-            setTimerControlsState(true);
-            setUrlVisibilityMode(false);
-            updateLogoPosition(false);
-            
-            // Clear any remaining intervals
-            if (countdownInterval) {
-                clearInterval(countdownInterval);
-                countdownInterval = null;
-            }
-            
-            // Update storage to reflect disabled state
-            chrome.storage.sync.set({ enabled: false }, () => {
-                // Show notification when timer ends
-                chrome.runtime.sendMessage({ 
-                    action: "showNotification",
-                    title: "Focus Session complete! YAY! 🎉",
-                    message: `You completed your ${originalMinutes} ${originalMinutes === 1 ? 'minute' : 'minutes'} focus session! You can now access all sites.`
-                });
-            });
-            
             return false;
         }
-        
+
         const minutes = Math.floor(timeLeft / 60000);
         const seconds = Math.floor((timeLeft % 60000) / 1000);
-        const displayMinutes = String(minutes).padStart(2, '0');
-        const displaySeconds = String(seconds).padStart(2, '0');
-        timerDisplay.textContent = `${displayMinutes}:${displaySeconds}`;
-        
+        timerDisplay.textContent = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+
         return true;
     }
 
-    function resetTimerDisplay() {
-        updateTimerPreview();
-    }
+    function onTimerComplete() {
+        timerActive = false;
+        enabled = false;
 
-    function setTimerControlsState(enabled) {
-        timerMinutes.disabled = !enabled;
-        startTimerBtn.disabled = !enabled;
-        
-        // Update logo position based on timer state
-        updateLogoPosition(!enabled);
-    
-        // Update switch state based on timer
-        toggleSwitch.disabled = timerActive; // Disable switch when timer is active
-        if (timerActive) {
-            toggleSwitch.checked = true; // Force ON when timer is active
-            toggleSwitch.style.opacity = "1";
-            toggleSwitch.style.cursor = "not-allowed";
-            timerMessage.textContent = "Focus mode active";
-        } else {
-            // When timer is not active, use the stored enabled state
-            chrome.storage.sync.get("enabled", (data) => {
-                toggleSwitch.checked = data.enabled;
-                statusText.textContent = data.enabled ? "Enabled" : "Disabled";
+        toggleSwitch.checked = false;
+        statusText.textContent = "OFF";
+        updateIcon(false);
+
+        // Mark latest history item complete
+        if (history[0] && !history[0].completed) {
+            history[0].completed = true;
+            history[0].blockedSnapshot = history[0].blockedSnapshot || [...blockedUrls];
+
+            const dayIndex = new Date().getDay();
+            stats.dailyMinutes[dayIndex] = (stats.dailyMinutes[dayIndex] || 0) + focusDurationMinutes;
+
+            const sites = history[0].blockedSnapshot || [];
+            sites.forEach(site => {
+                stats.blockedSites[site] = (stats.blockedSites[site] || 0) + 1;
             });
-            toggleSwitch.style.opacity = "1";
-            toggleSwitch.style.cursor = "pointer";
-            timerMessage.textContent = "";
-        }
-    }
 
-    function setUrlVisibilityMode(focusModeActive) {
-        if (focusModeActive) {
-            showUrlsBtn.style.display = "block";
-            urlListContainer.classList.add("hidden");
-            urlListContainer.classList.remove("visible");
-            removeCountdownElement();
+            chrome.storage.sync.set({ history, stats, enabled: false });
         } else {
-            showUrlsBtn.style.display = "none";
-            urlListContainer.classList.remove("hidden");
-            urlListContainer.classList.add("visible");
-            clearUrlTimeout();
-            removeCountdownElement();
+            chrome.storage.sync.set({ enabled: false });
+        }
+
+        // Fire a completion notification via the background service worker
+        const completedMinutes = focusDurationMinutes || parseInt(timerMinutes.value) || 1;
+        chrome.runtime.sendMessage({
+            action: "showNotification",
+            title: "Focus Session complete!",
+            message: `You completed your ${completedMinutes} minute${completedMinutes === 1 ? "" : "s"} focus session!`
+        });
+
+        updateTimerPreview();
+        renderHistory();
+        renderStats();
+
+        timerMessage.textContent = "Session complete!";
+        setTimeout(() => { timerMessage.textContent = ""; }, 3000);
+    }
+
+    function updateTimerPreview() {
+        if (!timerActive) {
+            const minutes = parseInt(timerMinutes.value) || 0;
+            timerDisplay.textContent = `${String(minutes).padStart(2, "0")}:00`;
         }
     }
 
-    function toggleUrlVisibility() {
-        if (!timerActive) return;
+    function saveCurrentAsPreset() {
+        const minutes = parseInt(timerMinutes.value);
+        if (isNaN(minutes) || minutes < 1) return;
 
-        urlListContainer.classList.remove("hidden");
-        urlListContainer.classList.add("visible");
-        showUrlsBtn.style.display = "none";
+        const name = (prompt("Name this preset:") || "").trim();
+        if (!name) return;
 
-        if (!countdownElement) {
-            countdownElement = document.createElement("div");
-            countdownElement.className = "countdown";
-            countdownElement.style.display = "none";
-            urlListContainer.appendChild(countdownElement);
-        }
-        resetUrlTimeout();
+        const preset = {
+            id: Date.now(),
+            name,
+            minutes
+        };
+
+        presets.push(preset);
+        chrome.storage.sync.set({ presets });
+        renderPresets();
+
+        timerMessage.textContent = `Saved "${name}"`;
+        setTimeout(() => { timerMessage.textContent = ""; }, 2000);
     }
 
-    function resetUrlTimeout() {
-        if (!timerActive) return;
-        secondsRemaining = 15;
-        if (countdownElement) {
-            countdownElement.textContent = `URLs will hide in ${secondsRemaining} seconds`;
-            countdownElement.style.display = "none";
-        }
-        clearUrlTimeout();
+    function renderPresets() {
+        presetList.innerHTML = "";
 
-        urlHideTimeout = setTimeout(hideUrlList, secondsRemaining * 1000);
-        urlCountdownInterval = setInterval(() => {
-            secondsRemaining--;
-            if (countdownElement) {
-                countdownElement.textContent = `URLs will hide in ${secondsRemaining} seconds`;
-                countdownElement.style.display = "none";
-            }
-            if (secondsRemaining <= 0) {
-                clearInterval(urlCountdownInterval);
-                urlCountdownInterval = null;
-            }
-        }, 1000);
+        if (!presets.length) {
+            presetList.innerHTML = '<div class="empty-state">No presets saved yet</div>';
+            return;
+        }
+
+        presets.forEach(preset => {
+            const div = document.createElement("div");
+            div.className = "preset-item";
+            div.innerHTML = `
+                <div class="preset-header">
+                    <div>
+                        <div class="preset-name">${preset.name}</div>
+                        <div class="preset-duration">${preset.minutes} minutes</div>
+                    </div>
+                </div>
+                <div class="preset-actions">
+                    <button class="btn-small" data-action="start">Start</button>
+                    <button class="btn-small danger" data-action="delete">Delete</button>
+                </div>
+            `;
+
+            div.querySelector('[data-action="start"]').addEventListener("click", () => {
+                timerMinutes.value = preset.minutes;
+                updateTimerPreview();
+                startFocusSession(preset.minutes);
+            });
+
+            div.querySelector('[data-action="delete"]').addEventListener("click", () => {
+                presets = presets.filter(p => p.id !== preset.id);
+                chrome.storage.sync.set({ presets });
+                renderPresets();
+            });
+
+            presetList.appendChild(div);
+        });
     }
 
-    function clearUrlTimeout() {
-        if (urlHideTimeout) {
-            clearTimeout(urlHideTimeout);
-            urlHideTimeout = null;
-        }
-        if (urlCountdownInterval) {
-            clearInterval(urlCountdownInterval);
-            urlCountdownInterval = null;
-        }
-    }
-
-    function hideUrlList() {
-        if (!timerActive) return;
-        urlListContainer.classList.add("hidden");
-        urlListContainer.classList.remove("visible");
-        showUrlsBtn.style.display = "block";
-        clearUrlTimeout();
-    }
-
-    function removeCountdownElement() {
-        if (countdownElement && countdownElement.parentNode) {
-            countdownElement.parentNode.removeChild(countdownElement);
-            countdownElement = null;
-        }
-    }
-
-    function addUrlToBlockList() {
+    function addBlockedSite() {
         const url = urlInput.value.trim();
         if (!url) return;
 
+        const domain = normalizeDomain(url);
+        if (!domain) return;
+
         chrome.storage.sync.get("blockedUrls", (data) => {
             const urls = data.blockedUrls || [];
-            if (!urls.includes(url)) {
-                urls.push(url);
-                chrome.runtime.sendMessage({ action: "updateUrls", urls: urls });
-                updateUrlList(urls);
+            if (!urls.includes(domain)) {
+                urls.push(domain);
+                blockedUrls = urls;
+                chrome.runtime.sendMessage({ action: "updateUrls", urls });
+                chrome.storage.sync.set({ blockedUrls: urls });
+                renderUrlList(urls);
+                renderUrlListFocus(urls);
                 urlInput.value = "";
             }
         });
-
-        if (timerActive) {
-            resetUrlTimeout();
-        }
     }
 
-    function updateUrlList(urls) {
-        urlList.innerHTML = "";
-    
-        if (urls.length === 0) {
-            const emptyMsg = document.createElement("li");
-            emptyMsg.textContent = "No blocked URLs";
-            emptyMsg.style.justifyContent = "center";
-            emptyMsg.style.color = "#888";
-            urlList.appendChild(emptyMsg);
-            return;
-        }
-    
-        // Get the current enabled state
-        chrome.storage.sync.get("enabled", (data) => {
-            const isEnabled = data.enabled;
-    
-            urls.forEach(url => {
-                const li = document.createElement("li");
-                const urlText = document.createElement("span");
-                urlText.textContent = url;
-                li.appendChild(urlText);
-    
-                const removeBtn = document.createElement("button");
-                removeBtn.textContent = "❌";
-                removeBtn.classList.add("remove-btn");
-    
-                if (timerActive || isEnabled) {
-                    // During timer or when enabled, show disabled remove button
-                    removeBtn.style.opacity = "0.5";
-                    removeBtn.style.cursor = "not-allowed";
-                    removeBtn.title = "Cannot remove while extension is active";
-                    removeBtn.disabled = true;
-                } else {
-                    // When disabled, allow URL deletion
-                    removeBtn.style.opacity = "1";
-                    removeBtn.style.cursor = "pointer";
-                    removeBtn.title = "Remove URL";
-                    removeBtn.addEventListener("click", () => {
-                        const newUrls = urls.filter(u => u !== url);
-                        chrome.runtime.sendMessage({ action: "updateUrls", urls: newUrls });
-                        updateUrlList(newUrls);
-                    });
-                }
-    
-                li.appendChild(removeBtn);
-                urlList.appendChild(li);
-            });
+    function addBlockedSiteFocus() {
+        const url = urlInputFocus.value.trim();
+        if (!url) return;
+
+        const domain = normalizeDomain(url);
+        if (!domain) return;
+
+        chrome.storage.sync.get("blockedUrls", (data) => {
+            const urls = data.blockedUrls || [];
+            if (!urls.includes(domain)) {
+                urls.push(domain);
+                blockedUrls = urls;
+                chrome.runtime.sendMessage({ action: "updateUrls", urls });
+                chrome.storage.sync.set({ blockedUrls: urls });
+                renderUrlList(urls);
+                renderUrlListFocus(urls);
+                urlInputFocus.value = "";
+            }
         });
     }
 
-    function updateIcon(enabled) {
-        const appLogo = document.getElementById('app-logo');
-        // Force immediate icon update
-        if (enabled) {
-            appLogo.src = 'icon_mischiveous.png';
-            console.log("Popup: Setting mischievous icon - extension is enabled");
-        } else {
-            appLogo.src = 'icon_sleep.png';
-            console.log("Popup: Setting sleep icon - extension is disabled");
+    function renderUrlList(urls) {
+        urlList.innerHTML = "";
+
+        if (!urls.length) {
+            urlList.innerHTML = '<div class="empty-state">No sites blocked yet</div>';
+            return;
         }
+
+        urls.forEach(url => {
+            const li = document.createElement("li");
+            li.className = "list-item";
+            const removeDisabled = enabled || timerActive ? "disabled" : "";
+            li.innerHTML = `
+                <span class="list-item-text">${url}</span>
+                <div class="list-item-actions">
+                    <button class="btn-small danger" ${removeDisabled} data-url="${url}">Remove</button>
+                </div>
+            `;
+
+            const btn = li.querySelector("button");
+            if (!removeDisabled) {
+                btn.addEventListener("click", () => removeUrl(url));
+            }
+
+            urlList.appendChild(li);
+        });
+    }
+
+    function renderUrlListFocus(urls) {
+        urlListFocus.innerHTML = "";
+
+        if (!urls.length) {
+            urlListFocus.innerHTML = '<div class="empty-state" style="padding: 20px;">No sites blocked yet</div>';
+            return;
+        }
+
+        urls.forEach(url => {
+            const li = document.createElement("li");
+            li.className = "list-item";
+            const removeDisabled = enabled || timerActive ? "disabled" : "";
+            li.innerHTML = `
+                <span class="list-item-text">${url}</span>
+                <div class="list-item-actions">
+                    <button class="btn-small danger" ${removeDisabled} data-url="${url}">Remove</button>
+                </div>
+            `;
+
+            const btn = li.querySelector("button");
+            if (!removeDisabled) {
+                btn.addEventListener("click", () => removeUrl(url));
+            }
+
+            urlListFocus.appendChild(li);
+        });
+    }
+
+    function removeUrl(url) {
+        if (enabled || timerActive) return;
+
+        chrome.storage.sync.get("blockedUrls", (data) => {
+            const urls = (data.blockedUrls || []).filter(u => u !== url);
+            blockedUrls = urls;
+            chrome.runtime.sendMessage({ action: "updateUrls", urls });
+            chrome.storage.sync.set({ blockedUrls: urls });
+            renderUrlList(urls);
+            renderUrlListFocus(urls);
+        });
+    }
+
+    function renderHistory() {
+        historyList.innerHTML = "";
+
+        if (!history.length) {
+            historyList.innerHTML = '<div class="empty-state">No focus sessions yet</div>';
+            return;
+        }
+
+        history.slice(0, 20).forEach(session => {
+            const date = new Date(session.date);
+            const div = document.createElement("div");
+            div.className = "list-item";
+            const statusColor = session.completed ? "var(--primary)" : "#8B4B6B";
+            div.innerHTML = `
+                <div>
+                    <div class="list-item-text">${session.duration} minutes</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
+                        ${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: "2-digit", minute:"2-digit"})}
+                    </div>
+                </div>
+                <div style="font-size: 12px; color: ${statusColor};">
+                    ${session.completed ? "✓ Completed" : "✗ Incomplete"}
+                </div>
+            `;
+            historyList.appendChild(div);
+        });
+    }
+
+    function renderStats() {
+        const completed = history.filter(h => h.completed);
+        const totalMinutes = completed.reduce((sum, h) => sum + h.duration, 0);
+
+        document.getElementById("total-sessions").textContent = completed.length;
+        document.getElementById("total-minutes").textContent = totalMinutes;
+
+        const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const maxMinutes = Math.max(...stats.dailyMinutes, 1);
+
+        weeklyChart.innerHTML = "";
+        stats.dailyMinutes.forEach((minutes, i) => {
+            const pct = (minutes / maxMinutes) * 100;
+            const div = document.createElement("div");
+            div.className = "bar-item";
+            div.innerHTML = `
+                <div class="bar-label">${days[i]}</div>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width:${pct}%">
+                        <span class="bar-value">${minutes}m</span>
+                    </div>
+                </div>
+            `;
+            weeklyChart.appendChild(div);
+        });
+
+        blockedStats.innerHTML = "";
+        const entries = Object.entries(stats.blockedSites || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        if (!entries.length) {
+            blockedStats.innerHTML = '<div class="empty-state">No data yet</div>';
+        } else {
+            entries.forEach(([site, count]) => {
+                const div = document.createElement("div");
+                div.className = "blocked-site-item";
+                div.innerHTML = `
+                    <span class="site-name">${site}</span>
+                    <span class="site-count">${count}</span>
+                `;
+                blockedStats.appendChild(div);
+            });
+        }
+    }
+
+    function normalizeDomain(input) {
+        const trimmed = input.trim();
+        if (!trimmed) return null;
+
+        try {
+            const hasProtocol = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed);
+            const url = new URL(hasProtocol ? trimmed : `https://${trimmed}`);
+            return url.hostname.replace(/^www\./i, "");
+        } catch (e) {
+            return trimmed;
+        }
+    }
+
+    function updateIcon(isEnabled) {
+        appLogo.src = isEnabled ? "icon_mischiveous.png" : "icon_sleep.png";
     }
 });

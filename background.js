@@ -1,12 +1,20 @@
 let enabled = false;
 let timerActive = false;
 let timerEndTime = 0;
+let timerStartTime = 0;
+let timerDurationMinutes = 0;
+const CONTEXT_MENU_ID = "tab-sniper-block-domain";
+const PRESET_ALARM_PREFIX = "tab-sniper-preset-";
 
 // Load initial state
-chrome.storage.sync.get(["enabled", "timerActive", "timerEndTime"], (data) => {
+chrome.storage.sync.get(
+    ["enabled", "timerActive", "timerEndTime", "timerStartTime", "timerDurationMinutes"], 
+    (data) => {
     if (data.enabled !== undefined) enabled = data.enabled;
     if (data.timerActive !== undefined) timerActive = data.timerActive;
     if (data.timerEndTime !== undefined) timerEndTime = data.timerEndTime;
+    if (data.timerStartTime !== undefined) timerStartTime = data.timerStartTime;
+    if (data.timerDurationMinutes !== undefined) timerDurationMinutes = data.timerDurationMinutes;
     
     // Check if timer should still be active
     if (timerActive && Date.now() >= timerEndTime) {
@@ -24,7 +32,15 @@ chrome.storage.sync.get(["enabled", "timerActive", "timerEndTime"], (data) => {
     // Double check icon after a short delay
     setTimeout(updateIcon, 100);
     
-    console.log("Initial state loaded:", { enabled, timerActive, timerEndTime });
+    console.log("Initial state loaded:", { enabled, timerActive, timerEndTime, timerStartTime, timerDurationMinutes });
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+    createContextMenu();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+    createContextMenu();
 });
 
 function updateIcon() {
@@ -36,6 +52,69 @@ function updateIcon() {
         chrome.action.setIcon({path: "icon_sleep.png"});
         console.log("Setting sleep icon - extension is disabled");
     }
+}
+
+function beginTimer(minutes, sourceLabel = "focus") {
+    const sanitizedMinutes = Math.max(1, parseInt(minutes, 10));
+    timerStartTime = Date.now();
+    timerEndTime = timerStartTime + (sanitizedMinutes * 60 * 1000);
+    timerDurationMinutes = sanitizedMinutes;
+    timerActive = true;
+    enabled = true; // Always enable extension when timer starts
+
+    chrome.storage.sync.set({
+        timerActive: true,
+        timerEndTime: timerEndTime,
+        timerStartTime: timerStartTime,
+        timerDurationMinutes: timerDurationMinutes,
+        enabled: true
+    });
+
+    console.log(`Timer started from ${sourceLabel}:`, { timerActive, timerEndTime, enabled });
+    updateIcon();
+
+    // Important: Also check all current tabs when timer starts
+    checkAllOpenTabs();
+
+    return timerEndTime;
+}
+
+function getSessionDurationMinutes() {
+    if (timerDurationMinutes) {
+        return Math.max(1, Math.round(timerDurationMinutes));
+    }
+
+    if (timerEndTime && timerStartTime) {
+        const minutes = Math.round((timerEndTime - timerStartTime) / 60000);
+        return Math.max(1, minutes);
+    }
+
+    return 1;
+}
+
+function extractDomain(url) {
+    try {
+        const hostname = new URL(url).hostname;
+        // Drop leading www for cleaner matching
+        return hostname.replace(/^www\./i, "");
+    } catch (e) {
+        return null;
+    }
+}
+
+function matchesBlockedUrl(targetUrl, blockedValue) {
+    const targetDomain = extractDomain(targetUrl);
+    if (!blockedValue) return false;
+
+    // If the blocked value looks like a domain, do domain comparison
+    const blockedDomain = extractDomain(blockedValue) || blockedValue;
+    if (blockedDomain && !blockedValue.includes("/")) {
+        if (!targetDomain) return false;
+        return targetDomain === blockedDomain || targetDomain.endsWith(`.${blockedDomain}`);
+    }
+
+    // Fallback to substring match for non-domain entries
+    return targetUrl.includes(blockedValue);
 }
 
 // Function to check if timer is expired
@@ -51,11 +130,12 @@ function checkTimerExpired() {
         updateIcon();
         
         // Show notification when timer ends
+        const durationMinutes = getSessionDurationMinutes();
         chrome.notifications.create('timer-end', {
             type: 'basic',
             iconUrl: 'icon_mischiveous.png',
             title: 'Focus Session complete! YAY! 🎉',
-            message: 'Your focus session has ended. You can now access all sites.',
+            message: `You completed your ${durationMinutes} ${durationMinutes === 1 ? 'minute' : 'minutes'} focus session! You can now access all sites.`,
             priority: 2
         });
         
@@ -79,7 +159,7 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
     if (enabled || timerActive) {
         chrome.storage.sync.get("blockedUrls", (data) => {
             const blockedUrls = data.blockedUrls || [];
-            if (blockedUrls.some(url => details.url.includes(url))) {
+            if (blockedUrls.some(url => matchesBlockedUrl(details.url, url))) {
                 console.log("Blocking navigation to:", details.url);
                 chrome.tabs.remove(details.tabId).catch(error => {
                     if (!error.message.includes("No tab with id")) {
@@ -110,7 +190,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (enabled || timerActive) {
         chrome.storage.sync.get("blockedUrls", (data) => {
             const blockedUrls = data.blockedUrls || [];
-            if (blockedUrls.some(url => changeInfo.url.includes(url))) {
+            if (blockedUrls.some(url => matchesBlockedUrl(changeInfo.url, url))) {
                 console.log("Blocking tab update to:", changeInfo.url);
                 chrome.tabs.remove(tabId).catch(error => {
                     if (!error.message.includes("No tab with id")) {
@@ -163,8 +243,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     // Handle URL updates
     else if (request.action === "updateUrls") {
-        chrome.storage.sync.set({ blockedUrls: request.urls });
-        console.log("URLs updated:", request.urls);
+        const rawUrls = request.urls || [];
+        const normalized = Array.from(new Set(rawUrls.map((url) => {
+            const domain = extractDomain(url);
+            return domain || url;
+        }).filter(Boolean)));
+        chrome.storage.sync.set({ blockedUrls: normalized });
+        console.log("URLs updated:", normalized);
         sendResponse({ success: true });
     }
     // Handle timer start
@@ -177,19 +262,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
         
         // Start new timer
-        timerEndTime = Date.now() + (minutes * 60 * 1000);
-        timerActive = true;
-        enabled = true; // Always enable extension when timer starts
-        
-        // Save state
-        chrome.storage.sync.set({
-            timerActive: true,
-            timerEndTime: timerEndTime,
-            enabled: true
-        });
-        
-        console.log("Timer started:", { timerActive, timerEndTime, enabled });
-        updateIcon();
+        const endTime = beginTimer(minutes, "popup");
         
         // Show notification when timer starts
         chrome.notifications.create({
@@ -201,12 +274,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
         
         // Important: Also check all current tabs when timer starts
-        checkAllOpenTabs();
-        
         sendResponse({ 
             success: true, 
-            timerEndTime: timerEndTime,
-            timerActive: true
+            timerEndTime: endTime,
+            timerActive: true,
+            timerDurationMinutes: timerDurationMinutes
         });
     }
     // Handle timer check
@@ -223,11 +295,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             updateIcon();
             
             // Show notification when timer ends
+            const durationMinutes = getSessionDurationMinutes();
             chrome.notifications.create('timer-end', {
                 type: 'basic',
                 iconUrl: 'icon_mischiveous.png',
                 title: 'Focus Session complete! YAY! 🎉',
-                message: 'Your focus session has ended. You can now access all sites.',
+                message: `You completed your ${durationMinutes} ${durationMinutes === 1 ? 'minute' : 'minutes'} focus session! You can now access all sites.`,
                 priority: 2
             });
         }
@@ -236,6 +309,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             enabled: enabled,
             timerActive: timerActive,
             timerEndTime: timerEndTime,
+            timerStartTime: timerStartTime,
+            timerDurationMinutes: timerDurationMinutes,
             currentTime: Date.now()
         });
     }
@@ -264,6 +339,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 timerActive: timerActive,
                 timerEndTime: timerEndTime,
                 currentTime: Date.now(),
+                timerStartTime: timerStartTime,
+                timerDurationMinutes: timerDurationMinutes,
                 blockedUrls: data.blockedUrls || []
             });
         });
@@ -287,8 +364,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         timerEndTime = Math.max(currentTime + 10000, newEndTime); // Keep at least 10 seconds
         
         // Save state
+        const updatedDurationMinutes = timerStartTime 
+            ? Math.max(1, Math.round((timerEndTime - timerStartTime) / 60000))
+            : Math.max(1, Math.round((timerEndTime - currentTime) / 60000));
+        timerDurationMinutes = updatedDurationMinutes;
         chrome.storage.sync.set({
-            timerEndTime: timerEndTime
+            timerEndTime: timerEndTime,
+            timerDurationMinutes: timerDurationMinutes
         });
         
         console.log("Timer reduced:", { 
@@ -298,7 +380,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         
         sendResponse({ 
             success: true, 
-            timerEndTime: timerEndTime
+            timerEndTime: timerEndTime,
+            timerDurationMinutes: timerDurationMinutes
         });
     }
     
@@ -318,7 +401,7 @@ function checkAllOpenTabs() {
             const blockedUrls = data.blockedUrls || [];
             
             tabs.forEach(tab => {
-                if (tab.url && blockedUrls.some(url => tab.url.includes(url))) {
+                if (tab.url && blockedUrls.some(url => matchesBlockedUrl(tab.url, url))) {
                     console.log("Blocking existing tab:", tab.url);
                     chrome.tabs.remove(tab.id).catch(error => {
                         if (!error.message.includes("No tab with id")) {
@@ -330,6 +413,72 @@ function checkAllOpenTabs() {
         });
     });
 }
+
+function computeNextAlarmTime(timeString) {
+    if (!timeString || !/^\d{2}:\d{2}$/.test(timeString)) return null;
+    const [hours, minutes] = timeString.split(":").map(Number);
+    const now = new Date();
+    const target = new Date();
+    target.setHours(hours, minutes, 0, 0);
+    if (target.getTime() <= now.getTime()) {
+        target.setDate(target.getDate() + 1);
+    }
+    return target.getTime();
+}
+
+function refreshPresetAlarms() {
+    chrome.alarms.getAll((alarms) => {
+        const presetAlarms = alarms.filter(a => a.name && a.name.startsWith(PRESET_ALARM_PREFIX));
+        presetAlarms.forEach(a => chrome.alarms.clear(a.name));
+
+        chrome.storage.sync.get("presets", (data) => {
+            const presets = data.presets || [];
+            presets.forEach((preset) => {
+                if (preset.scheduleTime) {
+                    const when = computeNextAlarmTime(preset.scheduleTime);
+                    if (when) {
+                        chrome.alarms.create(`${PRESET_ALARM_PREFIX}${preset.id}`, {
+                            when,
+                            periodInMinutes: 24 * 60 // daily
+                        });
+                        console.log("Scheduled preset alarm", preset.name, preset.scheduleTime);
+                    }
+                }
+            });
+        });
+    });
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+    if (!alarm.name || !alarm.name.startsWith(PRESET_ALARM_PREFIX)) return;
+    const presetId = alarm.name.replace(PRESET_ALARM_PREFIX, "");
+    
+    chrome.storage.sync.get("presets", (data) => {
+        const presets = data.presets || [];
+        const preset = presets.find(p => p.id === presetId);
+        if (!preset || !preset.scheduleTime) return;
+
+        if (timerActive) {
+            chrome.notifications.create({
+                type: 'basic',
+                iconUrl: 'icon_mischiveous.png',
+                title: 'Scheduled focus skipped',
+                message: `Skipped "${preset.name}" because a focus session is already running.`,
+                priority: 1
+            });
+            return;
+        }
+
+        const endTime = beginTimer(preset.minutes, "scheduled preset");
+        chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'icon_mischiveous.png',
+            title: `Scheduled focus started: ${preset.name}`,
+            message: `Focus mode for ${preset.minutes} ${preset.minutes === 1 ? 'minute' : 'minutes'} is now active.`,
+            priority: 2
+        });
+    });
+});
 
 // Listen for storage changes to keep state in sync
 chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -359,5 +508,70 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
         if (changes.timerEndTime !== undefined) {
             timerEndTime = changes.timerEndTime.newValue;
         }
+        if (changes.timerStartTime !== undefined) {
+            timerStartTime = changes.timerStartTime.newValue;
+        }
+        if (changes.timerDurationMinutes !== undefined) {
+            timerDurationMinutes = changes.timerDurationMinutes.newValue;
+        }
+        if (changes.presets !== undefined) {
+            refreshPresetAlarms();
+        }
     }
+});
+
+// Ensure context menu and alarms are ready on service worker start
+refreshPresetAlarms();
+
+function createContextMenu() {
+    chrome.contextMenus.removeAll(() => {
+        if (chrome.runtime.lastError) {
+            // Ignore errors from removeAll (e.g., no menus yet)
+        }
+        chrome.contextMenus.create({
+            id: CONTEXT_MENU_ID,
+            title: "Block this site in Tab Sniper",
+            contexts: ["page", "browser_action", "action"]
+        }, () => {
+            if (chrome.runtime.lastError) {
+                // Ignore duplicate creation errors
+            }
+        });
+    });
+}
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+    if (info.menuItemId !== CONTEXT_MENU_ID) return;
+    if (!tab || !tab.url) return;
+
+    const domain = extractDomain(tab.url);
+    if (!domain) return;
+
+    chrome.storage.sync.get("blockedUrls", (data) => {
+        const blockedUrls = data.blockedUrls || [];
+        if (blockedUrls.includes(domain)) {
+            chrome.notifications.create({
+                type: "basic",
+                iconUrl: "icon_mischiveous.png",
+                title: "Already blocked",
+                message: `${domain} is already in your blocked list.`
+            });
+            return;
+        }
+
+        const updated = [...blockedUrls, domain];
+        chrome.storage.sync.set({ blockedUrls: updated }, () => {
+            chrome.notifications.create({
+                type: "basic",
+                iconUrl: "icon_mischiveous.png",
+                title: "Site blocked",
+                message: `${domain} added to Tab Sniper block list.`
+            });
+
+            // If blocking is active, close matching tabs immediately
+            if (enabled || timerActive) {
+                checkAllOpenTabs();
+            }
+        });
+    });
 });
