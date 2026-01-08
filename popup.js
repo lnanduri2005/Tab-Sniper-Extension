@@ -1,5 +1,4 @@
 document.addEventListener("DOMContentLoaded", () => {
-    // State
     let enabled = false;
     let timerActive = false;
     let timerEndTime = 0;
@@ -13,7 +12,6 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     let blockedUrls = [];
 
-    // DOM Elements
     const toggleSwitch = document.getElementById("toggle-switch");
     const statusText = document.getElementById("status-text");
     const timerDisplay = document.getElementById("timer-display");
@@ -33,11 +31,26 @@ document.addEventListener("DOMContentLoaded", () => {
     const blockedStats = document.getElementById("blocked-stats");
     const historyList = document.getElementById("history-list");
 
-    // Tab Navigation
-    document.querySelectorAll(".tab").forEach(tab => {
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== "sync") return;
+        if (
+            changes.history ||
+            changes.stats ||
+            changes.enabled ||
+            changes.timerActive ||
+            changes.timerEndTime ||
+            changes.timerDurationMinutes ||
+            changes.presets ||
+            changes.blockedUrls
+        ) {
+            loadFromStorage();
+        }
+    });
+
+    document.querySelectorAll(".tab").forEach((tab) => {
         tab.addEventListener("click", () => {
-            document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-            document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+            document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+            document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
 
             tab.classList.add("active");
             document.getElementById(`${tab.dataset.tab}-tab`).classList.add("active");
@@ -48,7 +61,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    // Initialize
     init();
 
     function init() {
@@ -95,9 +107,11 @@ document.addEventListener("DOMContentLoaded", () => {
             blockedUrls = data.blockedUrls || [];
             presets = data.presets || [];
             history = data.history || [];
-            stats = data.stats || { dailyMinutes: [0, 0, 0, 0, 0, 0, 0], blockedSites: {} };
+            stats = data.stats || {
+                dailyMinutes: [0, 0, 0, 0, 0, 0, 0],
+                blockedSites: {}
+            };
 
-            // Ensure stats shape is intact
             if (!Array.isArray(stats.dailyMinutes) || stats.dailyMinutes.length !== 7) {
                 stats.dailyMinutes = [0, 0, 0, 0, 0, 0, 0];
             }
@@ -126,45 +140,43 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    function startFocusSession(presetMinutes = null) {
+    function startFocusSession(presetMinutes = null, presetName = null) {
         const minutes = presetMinutes || parseInt(timerMinutes.value);
         if (isNaN(minutes) || minutes < 1) {
             timerMessage.textContent = "Enter valid time";
             return;
         }
 
-        chrome.runtime.sendMessage({
-            action: "startTimer",
-            minutes: minutes
-        }, (response) => {
-            if (!response || !response.success) {
-                timerMessage.textContent = "Failed to start";
-                return;
+        chrome.runtime.sendMessage(
+            {
+                action: "startTimer",
+                minutes: minutes,
+                source: presetName ? `preset:${presetName}` : "popup"
+            },
+            (response) => {
+                if (!response || !response.success) {
+                    timerMessage.textContent = "Failed to start";
+                    return;
+                }
+
+                timerActive = true;
+                timerEndTime = response.timerEndTime;
+                focusDurationMinutes = response.timerDurationMinutes || minutes;
+                enabled = true;
+
+                toggleSwitch.checked = true;
+                statusText.textContent = "ON";
+                updateIcon(true);
+
+                startTimerCountdown(timerEndTime);
+                loadFromStorage();
+
+                timerMessage.textContent = "Focus mode activated!";
+                setTimeout(() => {
+                    timerMessage.textContent = "";
+                }, 2000);
             }
-
-            timerActive = true;
-            timerEndTime = response.timerEndTime;
-            focusDurationMinutes = response.timerDurationMinutes || minutes;
-            enabled = true;
-
-            toggleSwitch.checked = true;
-            statusText.textContent = "ON";
-            updateIcon(true);
-
-            startTimerCountdown(timerEndTime);
-
-            const session = {
-                date: new Date().toISOString(),
-                duration: minutes,
-                completed: false,
-                blockedSnapshot: [...blockedUrls]
-            };
-            history.unshift(session);
-            chrome.storage.sync.set({ history });
-
-            timerMessage.textContent = "Focus mode activated!";
-            setTimeout(() => { timerMessage.textContent = ""; }, 2000);
-        });
+        );
     }
 
     function startTimerCountdown(endTime) {
@@ -193,7 +205,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const minutes = Math.floor(timeLeft / 60000);
         const seconds = Math.floor((timeLeft % 60000) / 1000);
-        timerDisplay.textContent = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+        timerDisplay.textContent = `${String(minutes).padStart(2, "0")}:${String(
+            seconds
+        ).padStart(2, "0")}`;
 
         return true;
     }
@@ -206,38 +220,22 @@ document.addEventListener("DOMContentLoaded", () => {
         statusText.textContent = "OFF";
         updateIcon(false);
 
-        // Mark latest history item complete
-        if (history[0] && !history[0].completed) {
-            history[0].completed = true;
-            history[0].blockedSnapshot = history[0].blockedSnapshot || [...blockedUrls];
-
-            const dayIndex = new Date().getDay();
-            stats.dailyMinutes[dayIndex] = (stats.dailyMinutes[dayIndex] || 0) + focusDurationMinutes;
-
-            const sites = history[0].blockedSnapshot || [];
-            sites.forEach(site => {
-                stats.blockedSites[site] = (stats.blockedSites[site] || 0) + 1;
-            });
-
-            chrome.storage.sync.set({ history, stats, enabled: false });
-        } else {
-            chrome.storage.sync.set({ enabled: false });
-        }
-
-        // Fire a completion notification via the background service worker
-        const completedMinutes = focusDurationMinutes || parseInt(timerMinutes.value) || 1;
-        chrome.runtime.sendMessage({
-            action: "showNotification",
-            title: "Focus Session complete!",
-            message: `You completed your ${completedMinutes} minute${completedMinutes === 1 ? "" : "s"} focus session!`
-        });
+        chrome.runtime.sendMessage(
+            {
+                action: "expireTimer",
+                completed: true,
+                reason: "popup-countdown"
+            },
+            () => {
+                loadFromStorage();
+            }
+        );
 
         updateTimerPreview();
-        renderHistory();
-        renderStats();
-
         timerMessage.textContent = "Session complete!";
-        setTimeout(() => { timerMessage.textContent = ""; }, 3000);
+        setTimeout(() => {
+            timerMessage.textContent = "";
+        }, 3000);
     }
 
     function updateTimerPreview() {
@@ -265,7 +263,9 @@ document.addEventListener("DOMContentLoaded", () => {
         renderPresets();
 
         timerMessage.textContent = `Saved "${name}"`;
-        setTimeout(() => { timerMessage.textContent = ""; }, 2000);
+        setTimeout(() => {
+            timerMessage.textContent = "";
+        }, 2000);
     }
 
     function renderPresets() {
@@ -276,7 +276,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        presets.forEach(preset => {
+        presets.forEach((preset) => {
             const div = document.createElement("div");
             div.className = "preset-item";
             div.innerHTML = `
@@ -295,11 +295,11 @@ document.addEventListener("DOMContentLoaded", () => {
             div.querySelector('[data-action="start"]').addEventListener("click", () => {
                 timerMinutes.value = preset.minutes;
                 updateTimerPreview();
-                startFocusSession(preset.minutes);
+                startFocusSession(preset.minutes, preset.name);
             });
 
             div.querySelector('[data-action="delete"]').addEventListener("click", () => {
-                presets = presets.filter(p => p.id !== preset.id);
+                presets = presets.filter((p) => p.id !== preset.id);
                 chrome.storage.sync.set({ presets });
                 renderPresets();
             });
@@ -358,7 +358,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        urls.forEach(url => {
+        urls.forEach((url) => {
             const li = document.createElement("li");
             li.className = "list-item";
             const removeDisabled = enabled || timerActive ? "disabled" : "";
@@ -382,11 +382,12 @@ document.addEventListener("DOMContentLoaded", () => {
         urlListFocus.innerHTML = "";
 
         if (!urls.length) {
-            urlListFocus.innerHTML = '<div class="empty-state" style="padding: 20px;">No sites blocked yet</div>';
+            urlListFocus.innerHTML =
+                '<div class="empty-state" style="padding: 20px;">No sites blocked yet</div>';
             return;
         }
 
-        urls.forEach(url => {
+        urls.forEach((url) => {
             const li = document.createElement("li");
             li.className = "list-item";
             const removeDisabled = enabled || timerActive ? "disabled" : "";
@@ -410,7 +411,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (enabled || timerActive) return;
 
         chrome.storage.sync.get("blockedUrls", (data) => {
-            const urls = (data.blockedUrls || []).filter(u => u !== url);
+            const urls = (data.blockedUrls || []).filter((u) => u !== url);
             blockedUrls = urls;
             chrome.runtime.sendMessage({ action: "updateUrls", urls });
             chrome.storage.sync.set({ blockedUrls: urls });
@@ -427,7 +428,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        history.slice(0, 20).forEach(session => {
+        history.slice(0, 20).forEach((session) => {
             const date = new Date(session.date);
             const div = document.createElement("div");
             div.className = "list-item";
@@ -436,11 +437,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 <div>
                     <div class="list-item-text">${session.duration} minutes</div>
                     <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
-                        ${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: "2-digit", minute:"2-digit"})}
+                        ${date.toLocaleDateString()} ${date.toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit"
+                        })}
                     </div>
                 </div>
                 <div style="font-size: 12px; color: ${statusColor};">
-                    ${session.completed ? "✓ Completed" : "✗ Incomplete"}
+                    ${session.completed ? "Completed" : "Incomplete"}
                 </div>
             `;
             historyList.appendChild(div);
@@ -448,7 +452,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function renderStats() {
-        const completed = history.filter(h => h.completed);
+        const completed = history.filter((h) => h.completed);
         const totalMinutes = completed.reduce((sum, h) => sum + h.duration, 0);
 
         document.getElementById("total-sessions").textContent = completed.length;
@@ -474,7 +478,9 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         blockedStats.innerHTML = "";
-        const entries = Object.entries(stats.blockedSites || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const entries = Object.entries(stats.blockedSites || {})
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5);
         if (!entries.length) {
             blockedStats.innerHTML = '<div class="empty-state">No data yet</div>';
         } else {

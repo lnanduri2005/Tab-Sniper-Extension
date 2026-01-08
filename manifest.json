@@ -1,9 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Tab Sniper",
+<<<<<<< HEAD
   "version": "1.0.0",
   "description": "Boost productivity by blocking distracting websites during focus sessions. Features a customizable timer and website blocker.",
   "permissions": ["storage", "tabs", "webNavigation", "notifications"],
+=======
+  "version": "1.0",
+  "description": "Closes tabs with specified URLs automatically.",
+  "permissions": ["storage", "tabs", "webNavigation"],
+>>>>>>> e0f7080 (first commit)
   "background": {
     "service_worker": "background.js"
   },
@@ -11,6 +17,7 @@
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
+<<<<<<< HEAD
       "16": "icon_mischiveous.png",
       "48": "icon_mischiveous.png",
       "128": "icon_mischiveous.png"
@@ -24,4 +31,11 @@
   "author": "Likitha Nanduri, Abhigna Nimmagadda, and Parikshith Venkataraghavan",
   "homepage_url": "https://github.com/yourusername/tab-sniper",
   "minimum_chrome_version": "88"
+=======
+      "16": "icon_sleep.png",
+      "48": "icon_sleep.png",
+      "128": "icon_sleep.png"
+    }
+  }
+>>>>>>> e0f7080 (first commit)
 }

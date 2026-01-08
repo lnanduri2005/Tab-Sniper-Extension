@@ -13,8 +13,8 @@
 
 #cannon {
     position: absolute;
-    left: 20px;  /* Moved to left side */
-    bottom: 10px; /* Match position with the bucket */
+    left: 20px;
+    bottom: 10px;
     width: 50px;
     height: 50px;
     cursor: pointer;
@@ -27,7 +27,7 @@
     height: 50px;
     bottom: -10px;
     left: 0;
-    background-image: url('cannon.png');
+    background-image: url("cannon.png");
     background-size: contain;
     background-repeat: no-repeat;
     transform-origin: center center;
@@ -47,11 +47,11 @@
 
 #bucket {
     position: absolute;
-    right: 20px;  /* Moved to right side */
+    right: 20px;
     bottom: 10px;
     width: 30px;
     height: 30px;
-    background-image: url('basket.png');
+    background-image: url("basket.png");
     background-size: contain;
     background-repeat: no-repeat;
 }
@@ -64,7 +64,7 @@
     font-size: 13px;
     font-weight: 600;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
-    font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    font-family: "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
 }
 
 #game-message {
@@ -81,11 +81,10 @@
     transition: opacity 0.8s;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
     z-index: 10;
-    font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    font-family: "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
     letter-spacing: 0.3px;
 }
 
-/* Ground design */
 #game-container:after {
     content: "";
     position: absolute;
