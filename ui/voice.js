@@ -32,6 +32,13 @@ export const LINES = {
         "Not now. Finish strong."
     ],
     "block.closed": ["Good call. Proud of you.", "That's the one. Nicely done.", "See? Easy. Mostly.", "Future you says thanks.", "Win. I'll remember this one too."],
+    "block.late": [
+        "It's {time}. Bed.",
+        "Nothing good on {site} at {time}.",
+        "{time}? Go to sleep.",
+        "Even I nap at {time}.",
+        "Tomorrow you will not thank you for this."
+    ],
     "pause.wait": [
         "I'll wait. I'm very patient.",
         "Still sure about this?",
@@ -81,6 +88,12 @@ export function fill(template, vars = {}) {
     return template
         .replace(/\{(\w+)\}/g, (_, key) => (vars[key] ?? "").toString())
         .replace(/(\d+%?) (?=\S)/g, "$1\u00a0"); // no-break space keeps "10 min", "25 Shorts" together
+}
+
+// Between midnight and 5am the mascot notices the hour. -> "1am" or null
+export function lateNightHour(date = new Date()) {
+    const h = date.getHours();
+    return h < 5 ? `${h === 0 ? 12 : h}am` : null;
 }
 
 export function say(situation, vars = {}, rng = Math.random) {

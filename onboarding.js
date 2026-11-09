@@ -65,7 +65,7 @@ function tierCard(tier, title, body, cost) {
 function tourTiers() {
     const stops = [
         ["card-ban", "smug", "Ban: easy on, easy off. I just have to be awake."],
-        ["card-watched", "mischievous", "Watched: go ahead. I'll tap you on the shoulder."],
+        ["card-watched", "mischievous", "Watched: go ahead, but I'm counting. Scroll too long and it's locked for a bit."],
         ["card-super", "stern", "Super ban: no. Not even when I'm napping."]
     ];
     stops.forEach(([perch, mood, text], i) => {

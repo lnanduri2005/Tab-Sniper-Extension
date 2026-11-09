@@ -1,7 +1,7 @@
 import { send, formatDuration } from "./lib/api.js";
 import { parseBlockPageSearch } from "./lib/rules.js";
 import { createMascot } from "./ui/mascot.js";
-import { say } from "./ui/voice.js";
+import { say, lateNightHour } from "./ui/voice.js";
 import { ICONS } from "./ui/icons.js";
 import { loadSoundSetting, play } from "./ui/sound.js";
 import { el, $ } from "./ui/dom.js";
@@ -12,6 +12,12 @@ const TIER = {
     watched: { label: "Watched", icon: ICONS.eye },
     super: { label: "Super ban", icon: ICONS.lock }
 };
+
+// Late at night, sometimes swap the usual line for one about the hour (not during focus).
+function blockLine(situation, vars) {
+    const time = lateNightHour();
+    return time && Math.random() < 0.5 ? say("block.late", { ...vars, time }) : say(situation, vars);
+}
 
 const mascot = createMascot({ mood: "smug", label: "Tab Sniper mascot blocking this site" });
 $("mascot-slot").append(mascot.el);
@@ -81,13 +87,13 @@ async function init() {
     if (category === "super") {
         mascot.setMood(n >= 5 ? "angry" : "stern");
         mascot.react("shake");
-        $("bubble").textContent = say("block.super", { site: domain, n });
+        $("bubble").textContent = blockLine("block.super", { site: domain, n });
         renderPause(info, closeBtn);
     } else if (category === "watched") {
         mascot.setMood("smug");
         mascot.react("bounce");
         const c = info.cooldown;
-        $("bubble").textContent = say("block.watched", { site: domain, reason: c?.reason });
+        $("bubble").textContent = blockLine("block.watched", { site: domain, reason: c?.reason });
         if (c) {
             countdown(c.until, goBack);
             const trips = info.tripsToday ? `Trip #${info.tripsToday} today; the next one locks you out for ${info.nextCooldownMin} min. ` : "";
@@ -104,7 +110,7 @@ async function init() {
     } else {
         mascot.setMood("smug");
         mascot.react("bounce");
-        $("bubble").textContent = say("block.ban", { site: domain, n });
+        $("bubble").textContent = blockLine("block.ban", { site: domain, n });
         $("detail").textContent = "Banned while I'm awake. Put me to sleep from the toolbar to visit.";
         $("actions").replaceChildren(closeBtn);
     }
