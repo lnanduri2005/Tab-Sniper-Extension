@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Tab Sniper",
   "version": "2.0.0",
-  "description": "Stop doomscrolling. Ban distracting sites, super-ban the worst ones, and run focus sessions.",
+  "description": "Stop doomscrolling. Ban distracting sites, super-ban the worst ones, cut off endless Shorts and Reels, and run focus sessions.",
   "permissions": [
     "storage",
     "tabs",
@@ -10,7 +10,9 @@
     "notifications",
     "alarms",
     "contextMenus",
-    "declarativeNetRequest"
+    "declarativeNetRequest",
+    "scripting",
+    "idle"
   ],
   "background": {
     "service_worker": "background.js",

@@ -13,16 +13,25 @@ import { newRemoval, completeRemovalChallenge, removalStatus } from "./lib/remov
 import { migrate, ensureStatsShape } from "./lib/migrate.js";
 import { dayKey, bumpDaily, readDaily } from "./lib/day.js";
 import { lockChallenge, releaseChallenge } from "./challenges/index.js";
+import { PROFILES, newWatchedEntry, clampWatchField, findWatched } from "./lib/profiles.js";
+import { accrue, recordNav, evaluate, measure, emptyEntry, VISIT_GAP_MS } from "./lib/detector.js";
+import { startCooldown, inCooldown, nextCooldownMinutes, pruneCooldowns } from "./lib/cooldown.js";
+import { showToast } from "./lib/toast.js";
 
 const BLOCK_PAGE = chrome.runtime.getURL("blocked.html");
 const CONTEXT_MENU_ID = "tab-sniper-block-domain";
 const ALARM_TICK = "tick";
 const ALARM_SESSION_END = "session-end";
 const ALARM_PAUSE_PREFIX = "pause-end:";
+const ALARM_COOLDOWN_PREFIX = "cooldown-end:";
+const IDLE_SEC = 120;
 
-const SYNC_KEYS = ["enabled", "bans", "superBans", "settings", "pendingSettings", "removals", "challengeLocks", "presets"];
-const LOCAL_KEYS = ["timer", "history", "stats", "lastResetWeek", "pauses", "pauseRequests", "pauseUsage", "attempts", "dueNotified"];
-const RULE_KEYS = new Set(["enabled", "bans", "superBans", "settings", "timer", "pauses"]);
+const SYNC_KEYS = ["enabled", "bans", "superBans", "watched", "settings", "pendingSettings", "removals", "challengeLocks", "presets"];
+const LOCAL_KEYS = [
+    "timer", "history", "stats", "lastResetWeek", "pauses", "pauseRequests", "pauseUsage", "attempts", "dueNotified",
+    "watch", "activeFocus", "cooldowns", "trips"
+];
+const RULE_KEYS = new Set(["enabled", "bans", "superBans", "watched", "settings", "timer", "pauses", "cooldowns"]);
 
 // ---------- state ----------
 
@@ -32,6 +41,7 @@ async function loadState() {
         enabled: !!s.enabled,
         bans: s.bans || [],
         superBans: s.superBans || [],
+        watched: s.watched || [],
         settings: { ...DEFAULT_SETTINGS, ...(s.settings || {}) },
         pendingSettings: s.pendingSettings || [],
         removals: s.removals || {},
@@ -45,7 +55,11 @@ async function loadState() {
         pauseRequests: l.pauseRequests || {},
         pauseUsage: l.pauseUsage || {},
         attempts: l.attempts || {},
-        dueNotified: l.dueNotified || {}
+        dueNotified: l.dueNotified || {},
+        watch: l.watch || {},
+        activeFocus: l.activeFocus || null,
+        cooldowns: l.cooldowns || {},
+        trips: l.trips || {}
     };
 }
 
@@ -104,18 +118,105 @@ async function checkNavigation(tabId, url, { closeOnly = false } = {}) {
 chrome.webNavigation.onBeforeNavigate.addListener(({ frameId, tabId, url }) => {
     if (frameId === 0) ready.then(() => checkNavigation(tabId, url, { closeOnly: true }));
 });
-// Fallbacks for anything DNR misses (SPA route changes, rules not built yet).
-chrome.webNavigation.onCommitted.addListener(({ frameId, tabId, url }) => {
-    if (frameId === 0) ready.then(() => checkNavigation(tabId, url));
-});
-chrome.webNavigation.onHistoryStateUpdated.addListener(({ frameId, tabId, url }) => {
-    if (frameId === 0) ready.then(() => checkNavigation(tabId, url));
-});
+// Fallbacks for anything DNR misses (SPA route changes, rules not built yet),
+// plus swipe counting for Watched sites.
+function onNavigated({ frameId, tabId, url }) {
+    if (frameId !== 0) return;
+    ready.then(() => {
+        checkNavigation(tabId, url);
+        queueWatch(() => watchStep({ tabId, url }));
+    });
+}
+chrome.webNavigation.onCommitted.addListener(onNavigated);
+chrome.webNavigation.onHistoryStateUpdated.addListener(onNavigated);
 
 function updateIcon(state, now) {
     const on = bansActive(state, now);
     chrome.action.setIcon({ path: on ? "icon_mischiveous.png" : "icon_sleep.png" });
 }
+
+// ---------- watched sites ----------
+// Every step credits the time since the last step to whatever Watched site was focused
+// (and the user wasn't idle), counts swipes from URL changes, then warns or trips.
+
+let watchChain = Promise.resolve();
+function queueWatch(fn) {
+    watchChain = watchChain.then(fn).catch((e) => console.error("watch", e));
+    return watchChain;
+}
+
+async function currentFocus() {
+    try {
+        const win = await chrome.windows.getLastFocused();
+        if (!win?.focused) return null;
+        const [tab] = await chrome.tabs.query({ active: true, windowId: win.id });
+        if (!tab?.url) return null;
+        if ((await chrome.idle.queryState(IDLE_SEC)) !== "active") return null;
+        return { tabId: tab.id, url: tab.url };
+    } catch {
+        return null;
+    }
+}
+
+function liveEntry(entry, now) {
+    return entry && now - entry.lastAt <= VISIT_GAP_MS ? entry : null;
+}
+
+async function watchStep(nav = null) {
+    const state = await loadState();
+    const now = Date.now();
+    const watch = { ...state.watch };
+    const touched = new Map(); // domain -> { watched, tabId }
+
+    const prev = state.activeFocus;
+    if (prev) {
+        const w = findWatched(state.watched, prev.url);
+        if (w && !inCooldown(state.cooldowns, w.domain, now)) {
+            watch[w.domain] = accrue(watch[w.domain], w, prev.url, prev.since, now);
+            touched.set(w.domain, { w, tabId: prev.tabId });
+        }
+    }
+    if (nav) {
+        const w = findWatched(state.watched, nav.url);
+        if (w && !inCooldown(state.cooldowns, w.domain, now)) {
+            watch[w.domain] = recordNav(watch[w.domain], w, nav.url, now);
+            touched.set(w.domain, { w, tabId: nav.tabId });
+        }
+    }
+
+    let { cooldowns, trips } = state;
+    const toasts = [];
+    for (const { w, tabId } of touched.values()) {
+        const result = evaluate(watch[w.domain], w, now);
+        watch[w.domain] = result.entry;
+        if (result.trip) {
+            ({ cooldowns, trips } = startCooldown(cooldowns, trips, w.domain, result.trip.text, now, dayKey()));
+            watch[w.domain] = emptyEntry();
+            chrome.alarms.create(`${ALARM_COOLDOWN_PREFIX}${w.domain}`, { when: cooldowns[w.domain].until });
+        } else if (result.warn) {
+            toasts.push({ tabId, text: `${result.warn.text}. Tab Sniper cuts you off at the limit.` });
+        }
+    }
+
+    const focus = await currentFocus();
+    const update = { watch, activeFocus: focus ? { ...focus, since: now } : null };
+    if (cooldowns !== state.cooldowns) Object.assign(update, { cooldowns, trips });
+    await chrome.storage.local.set(update);
+
+    for (const { tabId, text } of toasts) {
+        chrome.scripting
+            .executeScript({ target: { tabId }, func: showToast, args: ["Heads up", text] })
+            .catch(() => {});
+    }
+}
+
+function kickWatch() {
+    ready.then(() => queueWatch(() => watchStep()));
+}
+chrome.tabs.onActivated.addListener(kickWatch);
+chrome.windows.onFocusChanged.addListener(kickWatch);
+chrome.idle.onStateChanged.addListener(kickWatch);
+chrome.idle.setDetectionInterval(IDLE_SEC);
 
 // ---------- focus timer ----------
 
@@ -203,6 +304,9 @@ async function tick() {
     const pruned = prunePauses(state.pauses, now);
     if (pruned.expired) await chrome.storage.local.set({ pauses: pruned.pauses });
 
+    const cooled = pruneCooldowns(state.cooldowns, now);
+    if (cooled.expired) await chrome.storage.local.set({ cooldowns: cooled.cooldowns });
+
     const dueNotified = { ...state.dueNotified };
     let notifiedChanged = false;
     for (const [domain, removal] of Object.entries(state.removals)) {
@@ -215,13 +319,18 @@ async function tick() {
     if (notifiedChanged) await chrome.storage.local.set({ dueNotified });
 
     await maybeResetWeekly(state);
+    await queueWatch(() => watchStep());
 }
 
 chrome.alarms.onAlarm.addListener((alarm) => {
     ready.then(async () => {
         if (alarm.name === ALARM_SESSION_END) {
             await endSession({ completed: true, reason: "alarm-expired" });
-        } else if (alarm.name.startsWith(ALARM_PAUSE_PREFIX) || alarm.name === ALARM_TICK) {
+        } else if (
+            alarm.name === ALARM_TICK ||
+            alarm.name.startsWith(ALARM_PAUSE_PREFIX) ||
+            alarm.name.startsWith(ALARM_COOLDOWN_PREFIX)
+        ) {
             await tick();
         }
     });
@@ -266,8 +375,53 @@ const handlers = {
                 removal: state.removals[domain] || null,
                 removalStatus: removalStatus(state.removals[domain], now),
                 attemptsToday: readDaily(state.attempts, day, domain)
-            }))
+            })),
+            watched: state.watched.map((w) => ({
+                ...w,
+                label: PROFILES[w.profile]?.label || null,
+                cooldown: inCooldown(state.cooldowns, w.domain, now) ? state.cooldowns[w.domain] : null,
+                usage: measure(liveEntry(state.watch[w.domain], now), w, now),
+                tripsToday: readDaily(state.trips, day, w.domain)
+            })),
+            profiles: Object.entries(PROFILES).map(([key, p]) => ({ key, label: p.label, domain: p.domain }))
         };
+    },
+
+    async addWatched({ profile, input }) {
+        const state = await loadState();
+        let entry;
+        if (profile) {
+            if (!PROFILES[profile]) return { ok: false, error: "Unknown profile" };
+            entry = newWatchedEntry({ profile });
+        } else {
+            const domain = normalizeDomain(input);
+            if (!domain) return { ok: false, error: "That doesn't look like a website" };
+            const match = Object.entries(PROFILES).find(([, p]) => p.domain === domain);
+            entry = newWatchedEntry(match ? { profile: match[0] } : { domain });
+        }
+        if (state.watched.some((w) => w.domain === entry.domain)) return { ok: true, domain: entry.domain };
+        await chrome.storage.sync.set({ watched: [...state.watched, entry] });
+        return { ok: true, domain: entry.domain };
+    },
+
+    async removeWatched({ domain }) {
+        const state = await loadState();
+        if (inCooldown(state.cooldowns, domain, Date.now())) return { ok: false, error: "Can't remove a site during its cooldown" };
+        await chrome.storage.sync.set({ watched: state.watched.filter((w) => w.domain !== domain) });
+        return { ok: true };
+    },
+
+    async updateWatched({ domain, field, value }) {
+        const state = await loadState();
+        if (inCooldown(state.cooldowns, domain, Date.now())) return { ok: false, error: "Can't change limits during a cooldown" };
+        const entry = state.watched.find((w) => w.domain === domain);
+        if (!entry || !(field in entry) || field === "domain" || field === "profile") return { ok: false, error: "Invalid field" };
+        const clamped = clampWatchField(field, value);
+        if (clamped === null) return { ok: false, error: "Invalid value" };
+        await chrome.storage.sync.set({
+            watched: state.watched.map((w) => (w.domain === domain ? { ...w, [field]: clamped } : w))
+        });
+        return { ok: true, value: clamped };
     },
 
     async toggle({ enabled }) {
@@ -397,12 +551,18 @@ const handlers = {
         const now = Date.now();
         const day = dayKey();
         const minutesLeft = pauseMinutesLeft(state.pauseUsage, domain, day, state.settings.pauseCapMin);
+        const stillBlocked = {
+            super: () => !!superDomainOf(state, domain) && !isPaused(state.pauses, domain, now),
+            watched: () => inCooldown(state.cooldowns, domain, now),
+            ban: () => bansActive(state, now) && state.bans.includes(domain)
+        }[category]?.() ?? false;
         return {
             ok: true,
             category,
-            stillBlocked: category === "super"
-                ? !!superDomainOf(state, domain) && !isPaused(state.pauses, domain, now)
-                : bansActive(state, now) && state.bans.includes(domain),
+            stillBlocked,
+            cooldown: state.cooldowns[domain] || null,
+            tripsToday: readDaily(state.trips, day, domain),
+            nextCooldownMin: nextCooldownMinutes(state.trips, domain, day),
             attemptsToday: readDaily(state.attempts, day, domain),
             pauseMinutesLeft: minutesLeft,
             pauseOptions: allowedPauseOptions(minutesLeft),
@@ -504,7 +664,7 @@ chrome.runtime.onInstalled.addListener(createContextMenu);
 
 async function init() {
     await runMigration();
-    chrome.alarms.create(ALARM_TICK, { periodInMinutes: 1 });
+    chrome.alarms.create(ALARM_TICK, { periodInMinutes: 0.5 });
     await tick();
     await scheduleRebuild();
 }
