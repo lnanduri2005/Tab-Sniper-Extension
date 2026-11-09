@@ -194,7 +194,7 @@ async function watchStep(nav = null) {
             watch[w.domain] = emptyEntry();
             chrome.alarms.create(`${ALARM_COOLDOWN_PREFIX}${w.domain}`, { when: cooldowns[w.domain].until });
         } else if (result.warn) {
-            toasts.push({ tabId, text: `${result.warn.text}. Tab Sniper cuts you off at the limit.` });
+            toasts.push({ tabId, text: `${result.warn.text}. I cut you off at the limit.` });
         }
     }
 
@@ -205,7 +205,7 @@ async function watchStep(nav = null) {
 
     for (const { tabId, text } of toasts) {
         chrome.scripting
-            .executeScript({ target: { tabId }, func: showToast, args: ["Heads up", text] })
+            .executeScript({ target: { tabId }, func: showToast, args: ["Easy there.", text] })
             .catch(() => {});
     }
 }

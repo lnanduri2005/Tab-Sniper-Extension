@@ -4,21 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Pause countdown · Tab Sniper</title>
-    <link rel="stylesheet" href="pages.css">
+    <link rel="stylesheet" href="ui/tokens.css">
+    <link rel="stylesheet" href="ui/base.css">
+    <link rel="stylesheet" href="ui/mascot.css">
+    <link rel="stylesheet" href="page.css">
 </head>
 <body>
-    <main>
-        <img src="icon_idle.png" class="mascot" alt="">
-        <h1 id="title">Waiting...</h1>
-        <p class="lead">Stay on this tab. Switching away or minimizing restarts the countdown.</p>
-        <div class="card">
-            <div class="big-timer" id="countdown">--:--</div>
-            <p class="muted" style="text-align:center;" id="detail"></p>
-            <div class="message" id="message" style="text-align:center;"></div>
-            <div class="row" style="justify-content:center; margin-top: 12px;">
-                <button class="btn ghost" id="cancel">Never mind</button>
-            </div>
-        </div>
+    <main class="stage-page">
+        <p class="bubble big" id="bubble" aria-live="polite"></p>
+        <div class="hero-mascot" id="mascot-slot"></div>
+        <h1 class="domain-title" id="title"></h1>
+        <div class="big-clock" id="countdown" role="timer">--:--</div>
+        <p class="detail" id="detail">Stay on this tab. Switching away or minimizing restarts the countdown.</p>
+        <p class="message" id="message" aria-live="polite"></p>
+        <div class="actions"><button class="btn ghost" id="cancel">Never mind</button></div>
     </main>
     <script type="module" src="pause.js"></script>
 </body>

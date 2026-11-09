@@ -80,6 +80,7 @@
     --danger: var(--m-blush-deep);
     --focus: var(--m-blush);
     --selection: rgba(238, 147, 171, 0.45);
+    --note: var(--m-blush);
     color-scheme: dark;
 }
 
@@ -95,6 +96,7 @@
         --danger: #c24d6c;
         --focus: var(--m-slate);
         --selection: rgba(92, 102, 136, 0.3);
+        --note: #a3375a;
         color-scheme: light;
     }
 }
@@ -110,5 +112,6 @@
     --danger: #c24d6c;
     --focus: var(--m-slate);
     --selection: rgba(92, 102, 136, 0.3);
+    --note: #a3375a;
     color-scheme: light;
 }

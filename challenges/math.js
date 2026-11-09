@@ -23,7 +23,7 @@ export function makeProblem(rng) {
     return { text: `${b * q} ÷ ${b} + ${c}`, answer: q + c };
 }
 
-export function mount(root, { mini, onComplete, rng = Math.random }) {
+export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.random }) {
     let remaining = mini ? PROBLEM_COUNT.mini : PROBLEM_COUNT.full;
     let solved = 0;
     let problem = makeProblem(rng);
@@ -47,10 +47,12 @@ export function mount(root, { mini, onComplete, rng = Math.random }) {
             solved += 1;
             remaining -= 1;
             status.textContent = "";
+            onEvent("progress", solved / (solved + remaining));
         } else {
             remaining += PENALTY;
             status.textContent = `Wrong, it was ${problem.answer}. +${PENALTY} problems.`;
             flash(question);
+            onEvent("mistake");
         }
         input.value = "";
         if (remaining <= 0) {

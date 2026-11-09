@@ -87,7 +87,7 @@ body { background: var(--m-frame); }
 .rows .row { padding: 8px var(--s3); }
 .row .tier { flex: none; }
 .row .when { font-weight: 800; font-size: var(--fs-sm); white-space: nowrap; }
-.row .when.hot { color: var(--m-blush); }
+.row .when.hot { color: var(--note); }
 
 /* ---------- focus ---------- */
 

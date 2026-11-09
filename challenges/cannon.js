@@ -49,17 +49,23 @@ export function oscillate(value, dir, speed, min, max, dt) {
     return { value: next, dir: nextDir };
 }
 
-function loadImage(name) {
-    const img = new Image();
-    img.src = new URL(`../${name}`, import.meta.url).href;
-    return img;
+function rr(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
 }
 
-export function mount(root, { mini, onComplete, rng = Math.random }) {
+export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.random }) {
     const needed = mini ? STREAK.mini : STREAK.full;
     const gravity = 760 + rng() * 140;
-    const cannonImg = loadImage("cannon.png");
-    const basketImg = loadImage("basket.png");
+    const css = getComputedStyle(document.documentElement);
+    const C = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
+    const ink = C("--m-ink", "#221f29");
+    const pal = { ink, screen: C("--m-screen", "#3a3743"), frame: C("--m-frame", "#c9c3d6"), cream: C("--m-cream", "#f2e8ca"), blush: C("--m-blush", "#ee93ab"), slate: C("--m-slate", "#5c6688"), ground: C("--surface", "#474452") };
 
     let angle = { value: 45, dir: 1 };
     let basket = { value: BASKET.minX + rng() * (BASKET.maxX - BASKET.minX), dir: rng() < 0.5 ? -1 : 1 };
@@ -92,6 +98,7 @@ export function mount(root, { mini, onComplete, rng = Math.random }) {
             streak += 1;
             best = Math.max(best, streak);
             status.textContent = streak >= needed ? "" : "In!";
+            onEvent("progress", streak / needed);
             if (streak >= needed) {
                 done = true;
                 render();
@@ -101,6 +108,7 @@ export function mount(root, { mini, onComplete, rng = Math.random }) {
         } else {
             if (streak > 0) status.textContent = "Miss. Streak reset.";
             else status.textContent = "Miss.";
+            onEvent("mistake");
             streak = 0;
         }
         render();
@@ -110,36 +118,59 @@ export function mount(root, { mini, onComplete, rng = Math.random }) {
 
     function draw() {
         ctx.clearRect(0, 0, WORLD.width, WORLD.height);
-        ctx.fillStyle = "#555";
-        ctx.fillRect(0, WORLD.height - 4, WORLD.width, 4);
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
 
-        // basket
-        const bw = BASKET.width + 8;
-        const bh = BASKET.height + 4;
-        if (basketImg.complete && basketImg.naturalWidth) {
-            ctx.drawImage(basketImg, basket.value - bw / 2, sy(bh), bw, bh);
-        } else {
-            ctx.fillStyle = "#c9b99a";
-            ctx.fillRect(basket.value - BASKET.width / 2, sy(BASKET.height), BASKET.width, BASKET.height);
-        }
+        // ground
+        ctx.fillStyle = pal.ground;
+        ctx.fillRect(0, WORLD.height - 6, WORLD.width, 6);
 
-        // cannon
+        // basket: a cream tub with an ink outline and a slate band
+        const bx = basket.value - BASKET.width / 2;
+        const by = sy(BASKET.height);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = pal.ink;
+        ctx.fillStyle = pal.slate;
+        rr(ctx, bx + 3, by + 6, BASKET.width - 6, BASKET.height - 6, 7);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = pal.cream;
+        rr(ctx, bx - 2, by - 2, BASKET.width + 4, 11, 5);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = pal.blush;
+        ctx.beginPath(); ctx.ellipse(bx + 12, by + 22, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(bx + BASKET.width - 12, by + 22, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+
+        // cannon: charcoal barrel with a frame-colored muzzle ring, sitting on a base
         ctx.save();
         ctx.translate(PIVOT.x, sy(PIVOT.y));
         ctx.rotate((-angle.value * Math.PI) / 180);
-        if (cannonImg.complete && cannonImg.naturalWidth) {
-            ctx.drawImage(cannonImg, -24, -20, 72, 40);
-        } else {
-            ctx.fillStyle = "#333";
-            ctx.fillRect(-10, -10, BARREL_LENGTH + 10, 20);
-        }
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = pal.ink;
+        ctx.fillStyle = pal.screen;
+        rr(ctx, -16, -12, BARREL_LENGTH + 18, 24, 11);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = pal.frame;
+        rr(ctx, BARREL_LENGTH - 4, -14, 9, 28, 4);
+        ctx.fill();
+        ctx.stroke();
         ctx.restore();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = pal.ink;
+        ctx.fillStyle = pal.frame;
+        rr(ctx, PIVOT.x - 20, sy(PIVOT.y) + 2, 40, 18, 8);
+        ctx.fill();
+        ctx.stroke();
 
         if (ball) {
             ctx.beginPath();
-            ctx.fillStyle = "#ff79c6";
-            ctx.arc(ball.x, sy(ball.y), BALL_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = pal.blush;
+            ctx.lineWidth = 2;
+            ctx.arc(ball.x, sy(ball.y), BALL_RADIUS + 1, 0, Math.PI * 2);
             ctx.fill();
+            ctx.stroke();
         }
     }
 

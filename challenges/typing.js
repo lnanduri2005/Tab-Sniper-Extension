@@ -40,7 +40,7 @@ export function checkTyping(sentence, typed) {
     return sentence.startsWith(typed) ? "progress" : "typo";
 }
 
-export function mount(root, { mini, onComplete, rng = Math.random }) {
+export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.random }) {
     const sentences = buildPassage(rng, mini ? TARGET_CHARS.mini : TARGET_CHARS.full);
     let index = 0;
     let typos = 0;
@@ -80,10 +80,12 @@ export function mount(root, { mini, onComplete, rng = Math.random }) {
             input.value = "";
             status.textContent = "Typo. Sentence restarted.";
             flash(target);
+            onEvent("mistake");
         } else if (result === "done") {
             index += 1;
             input.value = "";
             status.textContent = "";
+            onEvent("progress", index / sentences.length);
             if (index >= sentences.length) {
                 input.disabled = true;
                 onComplete();

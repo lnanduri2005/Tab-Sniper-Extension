@@ -4,15 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Challenge · Tab Sniper</title>
-    <link rel="stylesheet" href="pages.css">
+    <link rel="stylesheet" href="ui/tokens.css">
+    <link rel="stylesheet" href="ui/base.css">
+    <link rel="stylesheet" href="ui/mascot.css">
+    <link rel="stylesheet" href="page.css">
 </head>
 <body>
-    <main>
-        <img src="icon_mischiveous.png" class="mascot" alt="">
-        <h1 id="title">Challenge</h1>
-        <p class="lead" id="lead"></p>
-        <div class="card" id="challenge-root"></div>
-        <div class="card" id="result" hidden></div>
+    <main class="challenge-page">
+        <header>
+            <h1 id="title">Challenge</h1>
+            <p id="lead"></p>
+        </header>
+        <div class="task">
+            <div class="titlebar">
+                <div class="dots" aria-hidden="true"><span class="dot pink"></span><span class="dot slate"></span></div>
+                <span class="label" id="task-label"></span>
+            </div>
+            <div class="body" id="challenge-root"></div>
+        </div>
+        <aside class="referee" aria-live="polite">
+            <p class="bubble" id="bubble"></p>
+            <div id="mascot-slot"></div>
+        </aside>
     </main>
     <script type="module" src="challenge.js"></script>
 </body>
