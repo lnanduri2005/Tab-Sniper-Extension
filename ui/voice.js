@@ -31,6 +31,7 @@ export const LINES = {
         "Halfway there is still there. Keep going.",
         "Not now. Finish strong."
     ],
+    "block.closed": ["Good call. Proud of you.", "That's the one. Nicely done.", "See? Easy. Mostly.", "Future you says thanks.", "Win. I'll remember this one too."],
     "pause.wait": [
         "I'll wait. I'm very patient.",
         "Still sure about this?",

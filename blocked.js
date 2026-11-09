@@ -40,6 +40,18 @@ function countdown(until, onDone) {
     setInterval(update, 1000);
 }
 
+// Leaving is the win, so it gets a proud moment before the tab goes.
+let closing = false;
+function celebrateAndClose() {
+    if (closing) return;
+    closing = true;
+    mascot.setMood("proud");
+    mascot.react("bounce");
+    $("bubble").textContent = say("block.closed");
+    play("win");
+    setTimeout(closeTab, matchMedia("(prefers-reduced-motion: reduce)").matches ? 700 : 1100);
+}
+
 async function closeTab() {
     try {
         const tab = await chrome.tabs.getCurrent();
@@ -63,7 +75,7 @@ async function init() {
         return;
     }
     const n = attempt.attemptsToday || 1;
-    const closeBtn = el("button", { class: "btn ghost", html: `${ICONS.x}<span>Close this tab</span>`, onclick: closeTab });
+    const closeBtn = el("button", { class: "btn big", html: `${ICONS.x}<span>Close this tab</span>`, onclick: celebrateAndClose });
     $("facts").replaceChildren(tierChip(category in TIER ? category : "ban"), fact(`${n} ${n === 1 ? "try" : "tries"} today`));
 
     if (category === "super") {
@@ -105,10 +117,10 @@ function renderPause(info, closeBtn) {
         $("actions").replaceChildren(closeBtn);
         return;
     }
-    $("detail").textContent = `Need it for a minute? Pausing means a ${waitMin}-minute wait on a page you can't leave. ${info.pauseMinutesLeft} pause minutes left today.`;
+    $("detail").textContent = "";
     const buttons = info.pauseOptions.map((minutes) =>
         el("button", {
-            class: "btn small cream",
+            class: "btn small ghost",
             html: `${ICONS.pause}<span>Pause ${minutes} min</span>`,
             onclick: () => {
                 const params = new URLSearchParams({ d: domain, m: String(minutes) });
@@ -116,7 +128,28 @@ function renderPause(info, closeBtn) {
             }
         })
     );
-    $("actions").replaceChildren(closeBtn, ...buttons);
+    // Pausing is still there, one step back: it doesn't compete with leaving.
+    const options = el("div", { class: "pause-options", id: "pause-options", hidden: true }, [
+        el("p", { class: "detail", text: `Pausing means a ${waitMin}-minute wait on a page you can't leave. ${info.pauseMinutesLeft} pause minutes left today.` }),
+        el("div", { class: "actions" }, buttons)
+    ]);
+    const reveal = el("button", {
+        class: "text-btn",
+        "aria-expanded": "false",
+        "aria-controls": "pause-options",
+        text: "Pause instead...",
+        onclick: () => {
+            const open = options.hidden;
+            options.hidden = !open;
+            reveal.setAttribute("aria-expanded", String(open));
+            if (open) {
+                mascot.express("grudging", 2200);
+                buttons[0]?.focus();
+            }
+        }
+    });
+    $("actions").replaceChildren(closeBtn);
+    $("actions").after(el("div", { class: "pause-more" }, [reveal, options]));
 }
 
 init();

@@ -70,8 +70,8 @@ body.asleep .titlebar .dot { filter: saturate(0.3) brightness(0.85); }
 }
 .section-title { font-size: var(--fs-sm); font-weight: 800; color: var(--text-muted); margin-top: var(--s2); letter-spacing: 0.02em; }
 
-.wake { font-size: var(--fs-lg); padding: 11px 20px; }
-.wake.asleep { background: var(--m-cream); color: var(--m-ink); }
+.wake { font-size: var(--fs-md); padding: 9px 20px; background: var(--surface); color: var(--text); }
+.wake.asleep { font-size: var(--fs-lg); padding: 11px 20px; background: var(--accent); color: var(--accent-text); }
 .wake svg { width: 18px; height: 18px; }
 
 /* this tab */

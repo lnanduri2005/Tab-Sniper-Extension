@@ -30,6 +30,26 @@ body { min-height: 100vh; }
 .domain-title { font-size: var(--fs-2xl); font-weight: 800; overflow-wrap: anywhere; }
 
 .actions { display: flex; gap: var(--s3); flex-wrap: wrap; justify-content: center; margin-top: var(--s2); }
+.btn.big { font-size: var(--fs-lg); padding: 13px 30px; }
+.btn.big svg { width: 18px; height: 18px; }
+
+/* the quiet path back to the site: plain text, one click deeper */
+.pause-more { display: flex; flex-direction: column; align-items: center; gap: var(--s2); }
+.text-btn {
+    font: inherit;
+    font-weight: 700;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    background: none;
+    border: 0;
+    padding: var(--s1) var(--s2);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+.text-btn:hover { color: var(--text); }
+.pause-options { display: flex; flex-direction: column; align-items: center; gap: var(--s1); }
+.pause-options .actions { margin-top: 0; }
 .detail { color: var(--text-muted); font-size: var(--fs-sm); max-width: 46ch; text-wrap: balance; }
 
 .big-clock { font-size: clamp(56px, 12vw, 96px); font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
@@ -141,3 +161,4 @@ body { min-height: 100vh; }
 
 .result { text-align: center; display: flex; flex-direction: column; gap: var(--s3); align-items: center; }
 .result p { max-width: 46ch; }
+.detail:empty { display: none; }
