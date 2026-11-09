@@ -361,6 +361,7 @@ const handlers = {
             enabled: state.enabled,
             bansActive: bansActive(state, now),
             timer: timerRunning(state.timer, now) ? state.timer : null,
+            attemptsToday: state.attempts?.day === day ? state.attempts.byKey : {},
             bans: state.bans,
             presets: state.presets,
             settings: state.settings,

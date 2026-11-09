@@ -190,6 +190,7 @@ input[type="number"].field { border-radius: var(--r-md); width: 84px; text-align
     margin: 0 4px;
 }
 .tier.state { background: var(--surface-2); }
+.tier.icon-only { padding: 6px; width: 30px; height: 30px; justify-content: center; margin: 0 4px; flex: none; }
 .tier.hot { background: var(--m-blush); color: var(--m-ink); }
 
 /* ---------- speech bubble ---------- */
@@ -219,6 +220,7 @@ input[type="number"].field { border-radius: var(--r-md); width: 84px; text-align
 }
 .bubble.side::after { left: -11px; top: 50%; bottom: auto; transform: translateY(-50%) rotate(135deg); }
 
+.message:empty { display: none; }
 .message { min-height: 20px; font-size: var(--fs-sm); font-weight: 700; color: var(--m-blush); }
 .message.error { color: var(--m-blush); }
 
