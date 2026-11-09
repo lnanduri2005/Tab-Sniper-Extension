@@ -1,11 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Tab Sniper",
-  "version": "1.0.0",
-  "description": "Boost productivity by blocking distracting websites during focus sessions. Features a customizable timer and website blocker.",
-  "permissions": ["storage", "tabs", "webNavigation", "notifications", "alarms", "contextMenus"],
+  "version": "2.0.0",
+  "description": "Stop doomscrolling. Ban distracting sites, super-ban the worst ones, and run focus sessions.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "webNavigation",
+    "notifications",
+    "alarms",
+    "contextMenus",
+    "declarativeNetRequest"
+  ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "host_permissions": ["<all_urls>"],
   "action": {
@@ -16,12 +25,19 @@
       "128": "icon_mischiveous.png"
     }
   },
+  "options_page": "dashboard.html",
+  "web_accessible_resources": [
+    {
+      "resources": ["blocked.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "icons": {
     "16": "icon_mischiveous.png",
     "48": "icon_mischiveous.png",
     "128": "icon_mischiveous.png"
   },
   "author": "Likitha Nanduri, Abhigna Nimmagadda, and Parikshith Venkataraghavan",
-  "homepage_url": "https://github.com/yourusername/tab-sniper",
-  "minimum_chrome_version": "88"
+  "homepage_url": "https://github.com/lnanduri2005/Tab-Sniper-Extension",
+  "minimum_chrome_version": "102"
 }

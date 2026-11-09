@@ -1,642 +1,512 @@
-let enabled = false;
-let timerActive = false;
-let timerEndTime = 0;
-let timerStartTime = 0;
-let timerDurationMinutes = 0;
-let currentSessionId = null;
+// Tab Sniper service worker. Stateless: every event re-reads storage, so nothing breaks
+// when Chrome puts the worker to sleep.
+import { DEFAULT_SETTINGS, MINUTE_MS } from "./lib/defaults.js";
+import { normalizeDomain } from "./lib/match.js";
+import { decide, activeBlocks, bansActive, timerRunning, isPaused } from "./lib/policy.js";
+import { buildRules, blockPageUrl } from "./lib/rules.js";
+import { requestSettingChange, resolvePending } from "./lib/gating.js";
+import {
+    pauseMinutesLeft, allowedPauseOptions, startWait, beat, waitRemainingMs,
+    canComplete, grantPause, prunePauses
+} from "./lib/pause.js";
+import { newRemoval, completeRemovalChallenge, removalStatus } from "./lib/removal.js";
+import { migrate, ensureStatsShape } from "./lib/migrate.js";
+import { dayKey, bumpDaily, readDaily } from "./lib/day.js";
+import { lockChallenge, releaseChallenge } from "./challenges/index.js";
 
+const BLOCK_PAGE = chrome.runtime.getURL("blocked.html");
 const CONTEXT_MENU_ID = "tab-sniper-block-domain";
-const PRESET_ALARM_PREFIX = "tab-sniper-preset-";
-const SESSION_END_ALARM = "tab-sniper-session-end";
-const WEEKLY_RESET_ALARM = "tab-sniper-weekly-reset";
+const ALARM_TICK = "tick";
+const ALARM_SESSION_END = "session-end";
+const ALARM_PAUSE_PREFIX = "pause-end:";
 
-// Load initial state
-chrome.storage.sync.get(
-    [
-        "enabled",
-        "timerActive",
-        "timerEndTime",
-        "timerStartTime",
-        "timerDurationMinutes",
-        "currentSessionId",
-        "lastResetWeek"
-    ],
-    (data) => {
-        if (data.enabled !== undefined) enabled = data.enabled;
-        if (data.timerActive !== undefined) timerActive = data.timerActive;
-        if (data.timerEndTime !== undefined) timerEndTime = data.timerEndTime;
-        if (data.timerStartTime !== undefined) timerStartTime = data.timerStartTime;
-        if (data.timerDurationMinutes !== undefined) timerDurationMinutes = data.timerDurationMinutes;
-        if (data.currentSessionId !== undefined) currentSessionId = data.currentSessionId;
+const SYNC_KEYS = ["enabled", "bans", "superBans", "settings", "pendingSettings", "removals", "challengeLocks", "presets"];
+const LOCAL_KEYS = ["timer", "history", "stats", "lastResetWeek", "pauses", "pauseRequests", "pauseUsage", "attempts", "dueNotified"];
+const RULE_KEYS = new Set(["enabled", "bans", "superBans", "settings", "timer", "pauses"]);
 
-        maybeResetWeekly(data.lastResetWeek);
+// ---------- state ----------
 
-        if (timerActive && Date.now() >= timerEndTime) {
-            endActiveSession({ completed: true, reason: "resume-expired", notify: false });
-        } else if (timerActive) {
-            scheduleSessionEndAlarm(timerEndTime);
-        }
+async function loadState() {
+    const [s, l] = await Promise.all([chrome.storage.sync.get(SYNC_KEYS), chrome.storage.local.get(LOCAL_KEYS)]);
+    return {
+        enabled: !!s.enabled,
+        bans: s.bans || [],
+        superBans: s.superBans || [],
+        settings: { ...DEFAULT_SETTINGS, ...(s.settings || {}) },
+        pendingSettings: s.pendingSettings || [],
+        removals: s.removals || {},
+        challengeLocks: s.challengeLocks || {},
+        presets: s.presets || [],
+        timer: l.timer || null,
+        history: l.history || [],
+        stats: ensureStatsShape(l.stats),
+        lastResetWeek: l.lastResetWeek || null,
+        pauses: l.pauses || {},
+        pauseRequests: l.pauseRequests || {},
+        pauseUsage: l.pauseUsage || {},
+        attempts: l.attempts || {},
+        dueNotified: l.dueNotified || {}
+    };
+}
 
-        updateIcon();
-        setTimeout(updateIcon, 100);
-        console.log("Initial state loaded:", {
-            enabled,
-            timerActive,
-            timerEndTime,
-            timerStartTime,
-            timerDurationMinutes
-        });
-    }
-);
+async function runMigration() {
+    const [sync, local] = await Promise.all([chrome.storage.sync.get(null), chrome.storage.local.get(null)]);
+    const result = migrate(sync, local, Date.now());
+    if (!result) return;
+    await chrome.storage.sync.set(result.syncSet);
+    await chrome.storage.sync.remove(result.syncRemove);
+    await chrome.storage.local.set(result.localSet);
+}
 
-chrome.runtime.onInstalled.addListener(() => {
-    createContextMenu();
-    refreshPresetAlarms();
-    scheduleWeeklyResetCheck();
-});
+// ---------- blocking ----------
 
-chrome.runtime.onStartup.addListener(() => {
-    createContextMenu();
-    refreshPresetAlarms();
-    scheduleWeeklyResetCheck();
-});
+let rulesChain = Promise.resolve();
+function scheduleRebuild() {
+    rulesChain = rulesChain.then(rebuildRules).catch((e) => console.error("rebuildRules", e));
+    return rulesChain;
+}
 
-function updateIcon() {
-    if (enabled) {
-        chrome.action.setIcon({ path: "icon_mischiveous.png" });
-    } else {
-        chrome.action.setIcon({ path: "icon_sleep.png" });
+async function rebuildRules() {
+    const state = await loadState();
+    const now = Date.now();
+    const rules = buildRules(activeBlocks(state, now), BLOCK_PAGE);
+    const existing = await chrome.declarativeNetRequest.getDynamicRules();
+    await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: existing.map((r) => r.id),
+        addRules: rules
+    });
+    await enforceOpenTabs(state, now);
+    updateIcon(state, now);
+}
+
+function applyDecision(tabId, url, decision) {
+    if (decision.action === "close") {
+        chrome.tabs.remove(tabId).catch(() => {});
+    } else if (decision.action === "block") {
+        chrome.tabs.update(tabId, { url: blockPageUrl(BLOCK_PAGE, decision, url) }).catch(() => {});
     }
 }
 
-function ensureStatsShape(stats) {
-    const base = Array.isArray(stats?.dailyMinutes) && stats.dailyMinutes.length === 7
-        ? stats.dailyMinutes
-        : [0, 0, 0, 0, 0, 0, 0];
-    const blockedSites = stats?.blockedSites || {};
-    return { dailyMinutes: base, blockedSites };
+async function enforceOpenTabs(state, now) {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+        if (tab.url) applyDecision(tab.id, tab.url, decide(tab.url, state, now));
+    }
 }
+
+async function checkNavigation(tabId, url, { closeOnly = false } = {}) {
+    const decision = decide(url, await loadState(), Date.now());
+    if (closeOnly && decision.action !== "close") return;
+    applyDecision(tabId, url, decision);
+}
+
+// "close tab" bans have no DNR rule, so they're handled here.
+chrome.webNavigation.onBeforeNavigate.addListener(({ frameId, tabId, url }) => {
+    if (frameId === 0) ready.then(() => checkNavigation(tabId, url, { closeOnly: true }));
+});
+// Fallbacks for anything DNR misses (SPA route changes, rules not built yet).
+chrome.webNavigation.onCommitted.addListener(({ frameId, tabId, url }) => {
+    if (frameId === 0) ready.then(() => checkNavigation(tabId, url));
+});
+chrome.webNavigation.onHistoryStateUpdated.addListener(({ frameId, tabId, url }) => {
+    if (frameId === 0) ready.then(() => checkNavigation(tabId, url));
+});
+
+function updateIcon(state, now) {
+    const on = bansActive(state, now);
+    chrome.action.setIcon({ path: on ? "icon_mischiveous.png" : "icon_sleep.png" });
+}
+
+// ---------- focus timer ----------
 
 function getCurrentWeekKey(date = new Date()) {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
     const dayNum = d.getUTCDay() || 7;
     d.setUTCDate(d.getUTCDate() + 4 - dayNum);
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    const weekNo = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
     return `${d.getUTCFullYear()}-${weekNo}`;
 }
 
-function maybeResetWeekly(lastKnownWeek) {
-    const currentWeek = getCurrentWeekKey();
-    if (lastKnownWeek === currentWeek) return;
-    if (!lastKnownWeek) {
-        chrome.storage.sync.set({ lastResetWeek: currentWeek });
-        return;
+async function maybeResetWeekly(state) {
+    const week = getCurrentWeekKey();
+    if (state.lastResetWeek === week) return;
+    const update = { lastResetWeek: week };
+    if (state.lastResetWeek) {
+        update.history = [];
+        update.stats = ensureStatsShape({});
     }
-
-    chrome.storage.sync.get(["history", "stats", "currentSessionId"], () => {
-        const clearedHistory = [];
-        const clearedStats = ensureStatsShape({});
-        currentSessionId = null;
-
-        chrome.storage.sync.set({
-            history: clearedHistory,
-            stats: clearedStats,
-            currentSessionId: null,
-            lastResetWeek: currentWeek
-        });
-    });
+    await chrome.storage.local.set(update);
 }
 
-function scheduleWeeklyResetCheck() {
-    chrome.alarms.clear(WEEKLY_RESET_ALARM, () => {
-        chrome.alarms.create(WEEKLY_RESET_ALARM, {
-            periodInMinutes: 24 * 60,
-            when: Date.now() + 1000
-        });
-    });
-}
-
-function scheduleSessionEndAlarm(endTime) {
-    chrome.alarms.clear(SESSION_END_ALARM, () => {
-        if (endTime) {
-            chrome.alarms.create(SESSION_END_ALARM, { when: endTime });
-        }
-    });
-}
-
-function recordSessionStart(durationMinutes, sourceLabel) {
-    const sessionId = `session-${Date.now()}`;
-    chrome.storage.sync.get(["history", "blockedUrls"], (data) => {
-        const history = data.history || [];
-        const blockedSnapshot = data.blockedUrls || [];
-        const session = {
-            id: sessionId,
-            date: new Date().toISOString(),
-            duration: durationMinutes,
-            completed: false,
-            source: sourceLabel,
-            blockedSnapshot
-        };
-        const updatedHistory = [session, ...history].slice(0, 1000);
-        chrome.storage.sync.set({
-            history: updatedHistory,
-            currentSessionId: sessionId
-        });
-    });
-    currentSessionId = sessionId;
-    return sessionId;
-}
-
-function finalizeSessionRecord({ completed, reason, sessionMinutes }) {
-    chrome.storage.sync.get(["history", "stats", "currentSessionId"], (data) => {
-        const history = data.history || [];
-        const stats = ensureStatsShape(data.stats || {});
-        const sessionKey = data.currentSessionId || currentSessionId;
-        const nowIso = new Date().toISOString();
-
-        let index = sessionKey ? history.findIndex((h) => h.id === sessionKey) : -1;
-        if (index === -1) {
-            const fallbackId = sessionKey || `session-${Date.now()}`;
-            history.unshift({
-                id: fallbackId,
-                date: nowIso,
-                duration: sessionMinutes,
-                completed: false,
-                source: reason,
-                blockedSnapshot: []
-            });
-            index = 0;
-        }
-
-        const session = history[index];
-        session.completed = completed;
-        session.completedAt = nowIso;
-        session.reason = reason;
-        session.duration = session.duration || sessionMinutes || 0;
-
-        if (completed) {
-            const dayIndex = new Date().getDay();
-            stats.dailyMinutes[dayIndex] =
-                (stats.dailyMinutes[dayIndex] || 0) + (session.duration || 0);
-            (session.blockedSnapshot || []).forEach((site) => {
-                stats.blockedSites[site] = (stats.blockedSites[site] || 0) + 1;
-            });
-        }
-
-        chrome.storage.sync.set({
-            history,
-            stats,
-            currentSessionId: null
-        });
-        currentSessionId = null;
-    });
-}
-
-function endActiveSession({ completed, reason, notify }) {
-    if (!timerActive) return false;
-
-    const sessionMinutes = getSessionDurationMinutes();
-    scheduleSessionEndAlarm(null);
-
-    timerActive = false;
-    enabled = false;
-    timerEndTime = 0;
-    timerStartTime = 0;
-    timerDurationMinutes = 0;
-
-    const resetState = {
-        timerActive: false,
-        enabled: false,
-        timerEndTime: 0,
-        timerStartTime: 0,
-        timerDurationMinutes: 0
+async function startTimer(minutes, source) {
+    const state = await loadState();
+    if (timerRunning(state.timer, Date.now())) return { ok: false, error: "A focus session is already running" };
+    const duration = Math.max(1, parseInt(minutes, 10));
+    const startTime = Date.now();
+    const timer = {
+        active: true,
+        startTime,
+        endTime: startTime + duration * MINUTE_MS,
+        durationMinutes: duration,
+        sessionId: `session-${startTime}`
     };
+    const session = { id: timer.sessionId, date: new Date(startTime).toISOString(), duration, completed: false, source, blockedSnapshot: state.bans };
+    await chrome.storage.local.set({ timer, history: [session, ...state.history].slice(0, 200) });
+    chrome.alarms.create(ALARM_SESSION_END, { when: timer.endTime });
+    notify("Focus session started", `Focus mode on for ${duration} ${duration === 1 ? "minute" : "minutes"}. You can do it!`);
+    return { ok: true, timer };
+}
 
-    chrome.storage.sync.set(resetState);
-    finalizeSessionRecord({ completed, reason, sessionMinutes });
-    updateIcon();
+async function endSession({ completed, reason }) {
+    const state = await loadState();
+    const timer = state.timer;
+    if (!timer?.active) return false;
 
-    if (notify) {
-        chrome.notifications.create("timer-end", {
-            type: "basic",
-            iconUrl: "icon_mischiveous.png",
-            title: "Focus Session complete!",
-            message: `You completed your ${sessionMinutes} ${sessionMinutes === 1 ? "minute" : "minutes"} focus session! You can now access all sites.`,
-            priority: 2
-        });
+    const history = [...state.history];
+    const stats = ensureStatsShape(state.stats);
+    const index = history.findIndex((h) => h.id === timer.sessionId);
+    if (index !== -1) {
+        const session = { ...history[index], completed, reason, completedAt: new Date().toISOString() };
+        history[index] = session;
+        if (completed) {
+            const day = new Date().getDay();
+            stats.dailyMinutes[day] += session.duration || 0;
+            for (const site of session.blockedSnapshot || []) {
+                stats.blockedSites[site] = (stats.blockedSites[site] || 0) + 1;
+            }
+        }
     }
-
+    await chrome.storage.local.set({ timer: null, history, stats });
+    chrome.alarms.clear(ALARM_SESSION_END);
+    if (completed) {
+        notify("Focus session complete!", `You finished your ${timer.durationMinutes} minute session.`);
+    }
     return true;
 }
 
-function beginTimer(minutes, sourceLabel = "focus") {
-    const sanitizedMinutes = Math.max(1, parseInt(minutes, 10));
-    timerStartTime = Date.now();
-    timerEndTime = timerStartTime + (sanitizedMinutes * 60 * 1000);
-    timerDurationMinutes = sanitizedMinutes;
-    timerActive = true;
-    enabled = true;
-    const sessionId = recordSessionStart(timerDurationMinutes, sourceLabel);
+// ---------- periodic housekeeping ----------
 
-    chrome.storage.sync.set({
-        timerActive: true,
-        timerEndTime: timerEndTime,
-        timerStartTime: timerStartTime,
-        timerDurationMinutes: timerDurationMinutes,
-        enabled: true,
-        currentSessionId: sessionId
-    });
+async function tick() {
+    const state = await loadState();
+    const now = Date.now();
 
-    scheduleSessionEndAlarm(timerEndTime);
-    updateIcon();
-    checkAllOpenTabs();
-    return timerEndTime;
-}
-
-function getSessionDurationMinutes() {
-    if (timerDurationMinutes) {
-        return Math.max(1, Math.round(timerDurationMinutes));
-    }
-    if (timerEndTime && timerStartTime) {
-        const minutes = Math.round((timerEndTime - timerStartTime) / 60000);
-        return Math.max(1, minutes);
-    }
-    return 1;
-}
-
-function extractDomain(url) {
-    try {
-        const hostname = new URL(url).hostname;
-        return hostname.replace(/^www\./i, "");
-    } catch (e) {
-        return null;
-    }
-}
-
-function matchesBlockedUrl(targetUrl, blockedValue) {
-    const targetDomain = extractDomain(targetUrl);
-    if (!blockedValue) return false;
-
-    const blockedDomain = extractDomain(blockedValue) || blockedValue;
-    if (blockedDomain && !blockedValue.includes("/")) {
-        if (!targetDomain) return false;
-        return targetDomain === blockedDomain || targetDomain.endsWith(`.${blockedDomain}`);
+    if (state.timer?.active && state.timer.endTime <= now) {
+        await endSession({ completed: true, reason: "timer-expired" });
     }
 
-    return targetUrl.includes(blockedValue);
-}
-
-function checkTimerExpired() {
-    if (timerActive && Date.now() >= timerEndTime) {
-        return endActiveSession({ completed: true, reason: "timer-expired", notify: true });
+    const resolved = resolvePending(state.settings, state.pendingSettings, now);
+    if (resolved.changed) {
+        await chrome.storage.sync.set({ settings: resolved.settings, pendingSettings: resolved.pending });
     }
-    return false;
-}
 
-chrome.webNavigation.onBeforeNavigate.addListener((details) => {
-    if (details.frameId !== 0) return;
-    if (checkTimerExpired()) return;
+    const pruned = prunePauses(state.pauses, now);
+    if (pruned.expired) await chrome.storage.local.set({ pauses: pruned.pauses });
 
-    if (enabled || timerActive) {
-        chrome.storage.sync.get("blockedUrls", (data) => {
-            const blockedUrls = data.blockedUrls || [];
-            if (blockedUrls.some((url) => matchesBlockedUrl(details.url, url))) {
-                chrome.tabs.remove(details.tabId).catch((error) => {
-                    if (!error.message.includes("No tab with id")) {
-                        console.error("Error removing tab:", error);
-                    }
-                });
-            }
-        });
-    }
-});
-
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-    if (!changeInfo.url) return;
-    if (checkTimerExpired()) return;
-
-    if (enabled || timerActive) {
-        chrome.storage.sync.get("blockedUrls", (data) => {
-            const blockedUrls = data.blockedUrls || [];
-            if (blockedUrls.some((url) => matchesBlockedUrl(changeInfo.url, url))) {
-                chrome.tabs.remove(tabId).catch((error) => {
-                    if (!error.message.includes("No tab with id")) {
-                        console.error("Error removing tab:", error);
-                    }
-                });
-            }
-        });
-    }
-});
-
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === "toggle") {
-        if (!timerActive) {
-            enabled = request.enabled;
-            updateIcon();
-            chrome.storage.sync.set({ enabled: enabled }, () => {
-                setTimeout(updateIcon, 100);
-            });
-            if (enabled) {
-                checkAllOpenTabs();
-            }
+    const dueNotified = { ...state.dueNotified };
+    let notifiedChanged = false;
+    for (const [domain, removal] of Object.entries(state.removals)) {
+        if (removalStatus(removal, now) === "due" && dueNotified[domain] !== removal.dueAt) {
+            notify("Super ban removal ready", `You can now confirm removing ${domain} in the Tab Sniper dashboard.`);
+            dueNotified[domain] = removal.dueAt;
+            notifiedChanged = true;
         }
-        sendResponse({ enabled: enabled, timerActive: timerActive });
-    } else if (request.action === "showNotification") {
-        chrome.notifications.create("timer-end", {
-            type: "basic",
-            iconUrl: "icon_mischiveous.png",
-            title: request.title,
-            message: request.message,
-            priority: 2
-        });
-        sendResponse({ success: true });
-    } else if (request.action === "updateUrls") {
-        const rawUrls = request.urls || [];
-        const normalized = Array.from(
-            new Set(
-                rawUrls
-                    .map((url) => {
-                        const domain = extractDomain(url);
-                        return domain || url;
-                    })
-                    .filter(Boolean)
-            )
-        );
-        chrome.storage.sync.set({ blockedUrls: normalized });
-        sendResponse({ success: true });
-    } else if (request.action === "startTimer") {
-        const minutes = parseInt(request.minutes);
-        const sourceLabel = request.source || "popup";
-
-        if (isNaN(minutes) || minutes < 1) {
-            sendResponse({ success: false, message: "Invalid time" });
-            return true;
-        }
-
-        const endTime = beginTimer(minutes, sourceLabel);
-
-        chrome.notifications.create({
-            type: "basic",
-            iconUrl: "icon_mischiveous.png",
-            title: "Focus Session Started!",
-            message: `Focus mode activated for ${minutes} ${minutes === 1 ? "minute" : "minutes"}. You can do it!`,
-            priority: 2
-        });
-
-        sendResponse({
-            success: true,
-            timerEndTime: endTime,
-            timerActive: true,
-            timerDurationMinutes: timerDurationMinutes
-        });
-    } else if (request.action === "getTimerState") {
-        if (timerActive && Date.now() >= timerEndTime) {
-            endActiveSession({ completed: true, reason: "state-check-expired", notify: true });
-        }
-
-        sendResponse({
-            enabled: enabled,
-            timerActive: timerActive,
-            timerEndTime: timerEndTime,
-            timerStartTime: timerStartTime,
-            timerDurationMinutes: timerDurationMinutes,
-            currentTime: Date.now()
-        });
-    } else if (request.action === "expireTimer") {
-        const success = endActiveSession({
-            completed: request.completed !== false,
-            reason: request.reason || "explicit-expire",
-            notify: false
-        });
-        sendResponse({
-            success,
-            timerActive: timerActive,
-            enabled: enabled
-        });
-    } else if (request.action === "debug") {
-        chrome.storage.sync.get("blockedUrls", (data) => {
-            sendResponse({
-                enabled: enabled,
-                timerActive: timerActive,
-                timerEndTime: timerEndTime,
-                currentTime: Date.now(),
-                timerStartTime: timerStartTime,
-                timerDurationMinutes: timerDurationMinutes,
-                blockedUrls: data.blockedUrls || []
-            });
-        });
-        return true;
-    } else if (request.action === "reduceTimer") {
-        if (!timerActive) {
-            sendResponse({ success: false, message: "No active timer" });
-            return true;
-        }
-
-        const minutesToReduce = parseInt(request.minutes) || 1;
-        const reduction = minutesToReduce * 60 * 1000;
-        const newEndTime = timerEndTime - reduction;
-        const currentTime = Date.now();
-        timerEndTime = Math.max(currentTime + 10000, newEndTime);
-
-        const updatedDurationMinutes = timerStartTime
-            ? Math.max(1, Math.round((timerEndTime - timerStartTime) / 60000))
-            : Math.max(1, Math.round((timerEndTime - currentTime) / 60000));
-        timerDurationMinutes = updatedDurationMinutes;
-
-        chrome.storage.sync.set({
-            timerEndTime: timerEndTime,
-            timerDurationMinutes: timerDurationMinutes
-        });
-        scheduleSessionEndAlarm(timerEndTime);
-
-        sendResponse({
-            success: true,
-            timerEndTime: timerEndTime,
-            timerDurationMinutes: timerDurationMinutes
-        });
     }
+    if (notifiedChanged) await chrome.storage.local.set({ dueNotified });
 
-    return true;
-});
-
-function checkAllOpenTabs() {
-    if (!enabled && !timerActive) return;
-
-    chrome.tabs.query({}, (tabs) => {
-        chrome.storage.sync.get("blockedUrls", (data) => {
-            const blockedUrls = data.blockedUrls || [];
-            tabs.forEach((tab) => {
-                if (tab.url && blockedUrls.some((url) => matchesBlockedUrl(tab.url, url))) {
-                    chrome.tabs.remove(tab.id).catch((error) => {
-                        if (!error.message.includes("No tab with id")) {
-                            console.error("Error removing tab:", error);
-                        }
-                    });
-                }
-            });
-        });
-    });
-}
-
-function computeNextAlarmTime(timeString) {
-    if (!timeString || !/^\d{2}:\d{2}$/.test(timeString)) return null;
-    const [hours, minutes] = timeString.split(":").map(Number);
-    const now = new Date();
-    const target = new Date();
-    target.setHours(hours, minutes, 0, 0);
-    if (target.getTime() <= now.getTime()) {
-        target.setDate(target.getDate() + 1);
-    }
-    return target.getTime();
-}
-
-function refreshPresetAlarms() {
-    chrome.alarms.getAll((alarms) => {
-        const presetAlarms = alarms.filter((a) => a.name && a.name.startsWith(PRESET_ALARM_PREFIX));
-        presetAlarms.forEach((a) => chrome.alarms.clear(a.name));
-
-        chrome.storage.sync.get("presets", (data) => {
-            const presets = data.presets || [];
-            presets.forEach((preset) => {
-                if (preset.scheduleTime) {
-                    const when = computeNextAlarmTime(preset.scheduleTime);
-                    if (when) {
-                        chrome.alarms.create(`${PRESET_ALARM_PREFIX}${preset.id}`, {
-                            when,
-                            periodInMinutes: 24 * 60
-                        });
-                    }
-                }
-            });
-        });
-    });
+    await maybeResetWeekly(state);
 }
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === SESSION_END_ALARM) {
-        endActiveSession({ completed: true, reason: "alarm-expired", notify: true });
-        return;
-    }
-    if (alarm.name === WEEKLY_RESET_ALARM) {
-        maybeResetWeekly();
-        return;
-    }
-    if (!alarm.name || !alarm.name.startsWith(PRESET_ALARM_PREFIX)) return;
-    const presetId = alarm.name.replace(PRESET_ALARM_PREFIX, "");
-
-    chrome.storage.sync.get("presets", (data) => {
-        const presets = data.presets || [];
-        const preset = presets.find((p) => p.id === presetId);
-        if (!preset || !preset.scheduleTime) return;
-
-        if (timerActive) {
-            chrome.notifications.create({
-                type: "basic",
-                iconUrl: "icon_mischiveous.png",
-                title: "Scheduled focus skipped",
-                message: `Skipped "${preset.name}" because a focus session is already running.`,
-                priority: 1
-            });
-            return;
+    ready.then(async () => {
+        if (alarm.name === ALARM_SESSION_END) {
+            await endSession({ completed: true, reason: "alarm-expired" });
+        } else if (alarm.name.startsWith(ALARM_PAUSE_PREFIX) || alarm.name === ALARM_TICK) {
+            await tick();
         }
-
-        beginTimer(preset.minutes, `scheduled preset: ${preset.name}`);
-        chrome.notifications.create({
-            type: "basic",
-            iconUrl: "icon_mischiveous.png",
-            title: `Scheduled focus started: ${preset.name}`,
-            message: `Focus mode for ${preset.minutes} ${preset.minutes === 1 ? "minute" : "minutes"} is now active.`,
-            priority: 2
-        });
     });
 });
 
-chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace !== "sync") return;
+// ---------- message handlers ----------
 
-    if (changes.enabled !== undefined) {
-        enabled = changes.enabled.newValue;
-        updateIcon();
-        if (enabled) {
-            checkAllOpenTabs();
+function notify(title, message) {
+    chrome.notifications.create({ type: "basic", iconUrl: "icon_mischiveous.png", title, message, priority: 2 });
+}
+
+function superDomainOf(state, domain) {
+    return state.superBans.find((s) => s.domain === domain);
+}
+
+function lockKey(purpose, domain) {
+    return purpose === "removal" ? `removal:${domain}` : "endEarly";
+}
+
+const handlers = {
+    async getState() {
+        const state = await loadState();
+        const now = Date.now();
+        const day = dayKey();
+        return {
+            ok: true,
+            now,
+            enabled: state.enabled,
+            bansActive: bansActive(state, now),
+            timer: timerRunning(state.timer, now) ? state.timer : null,
+            bans: state.bans,
+            presets: state.presets,
+            settings: state.settings,
+            pendingSettings: state.pendingSettings,
+            history: state.history,
+            stats: state.stats,
+            superBans: state.superBans.map(({ domain, addedAt }) => ({
+                domain,
+                addedAt,
+                pausedUntil: isPaused(state.pauses, domain, now) ? state.pauses[domain].until : null,
+                pauseMinutesLeft: pauseMinutesLeft(state.pauseUsage, domain, day, state.settings.pauseCapMin),
+                removal: state.removals[domain] || null,
+                removalStatus: removalStatus(state.removals[domain], now),
+                attemptsToday: readDaily(state.attempts, day, domain)
+            }))
+        };
+    },
+
+    async toggle({ enabled }) {
+        const state = await loadState();
+        if (!enabled && timerRunning(state.timer, Date.now())) {
+            return { ok: false, error: "Can't turn off during a focus session" };
         }
-    }
-    if (changes.timerActive !== undefined) {
-        timerActive = changes.timerActive.newValue;
-        updateIcon();
-        if (timerActive) {
-            scheduleSessionEndAlarm(timerEndTime);
-            checkAllOpenTabs();
+        await chrome.storage.sync.set({ enabled: !!enabled });
+        return { ok: true };
+    },
+
+    async addBan({ input }) {
+        const domain = normalizeDomain(input);
+        if (!domain) return { ok: false, error: "That doesn't look like a website" };
+        const state = await loadState();
+        if (!state.bans.includes(domain)) await chrome.storage.sync.set({ bans: [...state.bans, domain] });
+        return { ok: true, domain };
+    },
+
+    async removeBan({ domain }) {
+        const state = await loadState();
+        if (bansActive(state, Date.now())) return { ok: false, error: "Turn Tab Sniper off to remove bans" };
+        await chrome.storage.sync.set({ bans: state.bans.filter((d) => d !== domain) });
+        return { ok: true };
+    },
+
+    async addSuperBan({ input }) {
+        const domain = normalizeDomain(input);
+        if (!domain) return { ok: false, error: "That doesn't look like a website" };
+        const state = await loadState();
+        if (superDomainOf(state, domain)) return { ok: true, domain };
+        await chrome.storage.sync.set({ superBans: [...state.superBans, { domain, addedAt: Date.now() }] });
+        return { ok: true, domain };
+    },
+
+    async requestRemoval({ domain }) {
+        const state = await loadState();
+        if (!superDomainOf(state, domain)) return { ok: false, error: "Not a super ban" };
+        const removals = { ...state.removals };
+        if (!removals[domain]) removals[domain] = newRemoval(Date.now());
+        const { locks } = lockChallenge(state.challengeLocks, lockKey("removal", domain));
+        await chrome.storage.sync.set({ removals, challengeLocks: locks });
+        return { ok: true, url: chrome.runtime.getURL(`challenge.html?purpose=removal&d=${encodeURIComponent(domain)}`) };
+    },
+
+    async cancelRemoval({ domain }) {
+        const state = await loadState();
+        const removals = { ...state.removals };
+        delete removals[domain];
+        await chrome.storage.sync.set({ removals });
+        return { ok: true };
+    },
+
+    async confirmRemoval({ domain }) {
+        const state = await loadState();
+        if (removalStatus(state.removals[domain], Date.now()) !== "due") {
+            return { ok: false, error: "Cool-off hasn't finished yet" };
+        }
+        const removals = { ...state.removals };
+        delete removals[domain];
+        await chrome.storage.sync.set({ removals, superBans: state.superBans.filter((s) => s.domain !== domain) });
+        return { ok: true };
+    },
+
+    async getChallenge({ purpose, domain }) {
+        const state = await loadState();
+        const now = Date.now();
+        if (purpose === "removal") {
+            const status = removalStatus(state.removals[domain], now);
+            if (status !== "challenge") return { ok: false, error: status === "none" ? "No removal requested" : "Challenge already done" };
+        } else if (purpose === "endEarly") {
+            if (!timerRunning(state.timer, now)) return { ok: false, error: "No focus session running" };
         } else {
-            scheduleSessionEndAlarm(null);
+            return { ok: false, error: "Unknown challenge" };
         }
-    }
-    if (changes.timerEndTime !== undefined) {
-        timerEndTime = changes.timerEndTime.newValue;
-        if (timerActive) {
-            scheduleSessionEndAlarm(timerEndTime);
+        const key = lockKey(purpose, domain);
+        const { locks, type } = lockChallenge(state.challengeLocks, key);
+        if (locks !== state.challengeLocks) await chrome.storage.sync.set({ challengeLocks: locks });
+        return { ok: true, type, mini: purpose === "endEarly" };
+    },
+
+    async challengeComplete({ purpose, domain }) {
+        const state = await loadState();
+        const now = Date.now();
+        const challengeLocks = releaseChallenge(state.challengeLocks, lockKey(purpose, domain));
+        if (purpose === "removal") {
+            const removal = state.removals[domain];
+            if (removalStatus(removal, now) !== "challenge") return { ok: false, error: "No challenge pending" };
+            const done = completeRemovalChallenge(removal, now, state.settings.coolOffHours);
+            await chrome.storage.sync.set({ removals: { ...state.removals, [domain]: done }, challengeLocks });
+            return { ok: true, dueAt: done.dueAt };
         }
+        if (purpose === "endEarly") {
+            await chrome.storage.sync.set({ challengeLocks });
+            await endSession({ completed: false, reason: "ended-early" });
+            return { ok: true };
+        }
+        return { ok: false, error: "Unknown challenge" };
+    },
+
+    async startTimer({ minutes, source }) {
+        if (!(parseInt(minutes, 10) >= 1)) return { ok: false, error: "Enter a valid time" };
+        return startTimer(minutes, source || "popup");
+    },
+
+    async savePresets({ presets }) {
+        await chrome.storage.sync.set({ presets });
+        return { ok: true };
+    },
+
+    async updateSetting({ key, value }) {
+        const state = await loadState();
+        const r = requestSettingChange(state.settings, state.pendingSettings, key, value, Date.now());
+        if (r.status === "invalid") return { ok: false, error: "Invalid setting" };
+        await chrome.storage.sync.set({ settings: r.settings, pendingSettings: r.pending });
+        return { ok: true, status: r.status, effectiveAt: r.effectiveAt };
+    },
+
+    async cancelPendingSetting({ key }) {
+        const state = await loadState();
+        await chrome.storage.sync.set({ pendingSettings: state.pendingSettings.filter((p) => p.key !== key) });
+        return { ok: true };
+    },
+
+    async getBlockInfo({ domain, category }) {
+        const state = await loadState();
+        const now = Date.now();
+        const day = dayKey();
+        const minutesLeft = pauseMinutesLeft(state.pauseUsage, domain, day, state.settings.pauseCapMin);
+        return {
+            ok: true,
+            category,
+            stillBlocked: category === "super"
+                ? !!superDomainOf(state, domain) && !isPaused(state.pauses, domain, now)
+                : bansActive(state, now) && state.bans.includes(domain),
+            attemptsToday: readDaily(state.attempts, day, domain),
+            pauseMinutesLeft: minutesLeft,
+            pauseOptions: allowedPauseOptions(minutesLeft),
+            pauseWaitSec: state.settings.pauseWaitSec,
+            timer: timerRunning(state.timer, now) ? state.timer : null,
+            now
+        };
+    },
+
+    async recordAttempt({ domain }) {
+        const state = await loadState();
+        const attempts = bumpDaily(state.attempts, dayKey(), domain);
+        await chrome.storage.local.set({ attempts });
+        return { ok: true, attemptsToday: attempts.byKey[domain] };
+    },
+
+    async pauseStart({ domain, minutes }) {
+        const state = await loadState();
+        const now = Date.now();
+        if (!superDomainOf(state, domain)) return { ok: false, error: "Not a super ban" };
+        const left = pauseMinutesLeft(state.pauseUsage, domain, dayKey(), state.settings.pauseCapMin);
+        if (!allowedPauseOptions(left).includes(Number(minutes))) return { ok: false, error: "Daily pause limit reached" };
+        const pauseRequests = { ...state.pauseRequests, [domain]: startWait(now, Number(minutes)) };
+        await chrome.storage.local.set({ pauseRequests });
+        return { ok: true, remainingMs: state.settings.pauseWaitSec * 1000 };
+    },
+
+    async pauseBeat({ domain, hidden }) {
+        const state = await loadState();
+        const now = Date.now();
+        const request = state.pauseRequests[domain];
+        if (!request) return { ok: false, error: "No pause in progress" };
+        const next = beat(request, now, { hidden });
+        await chrome.storage.local.set({ pauseRequests: { ...state.pauseRequests, [domain]: next } });
+        return { ok: true, reset: next.reset, remainingMs: waitRemainingMs(next, now, state.settings.pauseWaitSec) };
+    },
+
+    async pauseComplete({ domain }) {
+        const state = await loadState();
+        const now = Date.now();
+        const request = state.pauseRequests[domain];
+        if (!canComplete(request, now, state.settings.pauseWaitSec)) return { ok: false, error: "Countdown not finished" };
+        const day = dayKey();
+        const left = pauseMinutesLeft(state.pauseUsage, domain, day, state.settings.pauseCapMin);
+        if (request.minutes > left) return { ok: false, error: "Daily pause limit reached" };
+        const { pauses, usage } = grantPause(state.pauses, state.pauseUsage, domain, request.minutes, now, day);
+        const pauseRequests = { ...state.pauseRequests };
+        delete pauseRequests[domain];
+        await chrome.storage.local.set({ pauses, pauseUsage: usage, pauseRequests });
+        chrome.alarms.create(`${ALARM_PAUSE_PREFIX}${domain}`, { when: pauses[domain].until });
+        return { ok: true, until: pauses[domain].until };
+    },
+
+    async pauseCancel({ domain }) {
+        const state = await loadState();
+        const pauseRequests = { ...state.pauseRequests };
+        delete pauseRequests[domain];
+        await chrome.storage.local.set({ pauseRequests });
+        return { ok: true };
     }
-    if (changes.timerStartTime !== undefined) {
-        timerStartTime = changes.timerStartTime.newValue;
-    }
-    if (changes.timerDurationMinutes !== undefined) {
-        timerDurationMinutes = changes.timerDurationMinutes.newValue;
-    }
-    if (changes.presets !== undefined) {
-        refreshPresetAlarms();
-    }
+};
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    const handler = handlers[msg?.action];
+    if (!handler) return false;
+    ready
+        .then(() => handler(msg, sender))
+        .then(sendResponse, (err) => sendResponse({ ok: false, error: String(err?.message || err) }));
+    return true;
 });
 
-refreshPresetAlarms();
-scheduleWeeklyResetCheck();
+chrome.storage.onChanged.addListener((changes) => {
+    if (Object.keys(changes).some((key) => RULE_KEYS.has(key))) ready.then(scheduleRebuild);
+});
+
+// ---------- context menu ----------
 
 function createContextMenu() {
     chrome.contextMenus.removeAll(() => {
-        chrome.contextMenus.create(
-            {
-                id: CONTEXT_MENU_ID,
-                title: "Block this site in Tab Sniper",
-                contexts: ["page", "browser_action", "action"]
-            },
-            () => {}
-        );
+        chrome.contextMenus.create({
+            id: CONTEXT_MENU_ID,
+            title: "Ban this site in Tab Sniper",
+            contexts: ["page", "action"]
+        });
     });
 }
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-    if (info.menuItemId !== CONTEXT_MENU_ID) return;
-    if (!tab || !tab.url) return;
-
-    const domain = extractDomain(tab.url);
-    if (!domain) return;
-
-    chrome.storage.sync.get("blockedUrls", (data) => {
-        const blockedUrls = data.blockedUrls || [];
-        if (blockedUrls.includes(domain)) {
-            chrome.notifications.create({
-                type: "basic",
-                iconUrl: "icon_mischiveous.png",
-                title: "Already blocked",
-                message: `${domain} is already in your blocked list.`
-            });
-            return;
-        }
-
-        const updated = [...blockedUrls, domain];
-        chrome.storage.sync.set({ blockedUrls: updated }, () => {
-            chrome.notifications.create({
-                type: "basic",
-                iconUrl: "icon_mischiveous.png",
-                title: "Site blocked",
-                message: `${domain} added to Tab Sniper block list.`
-            });
-
-            if (enabled || timerActive) {
-                checkAllOpenTabs();
-            }
-        });
+    if (info.menuItemId !== CONTEXT_MENU_ID || !tab?.url) return;
+    ready.then(async () => {
+        const result = await handlers.addBan({ input: tab.url });
+        if (result.ok) notify("Site banned", `${result.domain} added to your bans.`);
     });
 });
+
+// ---------- startup ----------
+
+chrome.runtime.onInstalled.addListener(createContextMenu);
+
+async function init() {
+    await runMigration();
+    chrome.alarms.create(ALARM_TICK, { periodInMinutes: 1 });
+    await tick();
+    await scheduleRebuild();
+}
+
+const ready = init().catch((e) => console.error("init failed", e));
