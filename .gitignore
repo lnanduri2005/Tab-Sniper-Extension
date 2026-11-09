@@ -1,3 +1,5 @@
-.impeccable/questions/
-.impeccable/hook.cache.json
-.impeccable/review/
+# design tooling (Impeccable) and AI assistant files: kept locally, not shipped
+.impeccable/
+PRODUCT.md
+DESIGN.md
+CLAUDE.md
