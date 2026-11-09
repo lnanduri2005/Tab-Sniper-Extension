@@ -288,9 +288,10 @@ function renderSites() {
             items.length ? el("ul", { class: "rows" }, items) : el("p", { class: "empty", text: emptyText })
         ]);
 
-    groups.push(group("Super bans", "super", supers, "Locked 24/7. Undo takes a challenge and a 12h wait."));
-    groups.push(group("Watched", "watched", watched, "Allowed, but cut off when you doomscroll."));
+    // least to most intense
     groups.push(group("Bans", "ban", bans, "Blocked while I'm awake."));
+    groups.push(group("Watched", "watched", watched, "Allowed, but cut off when you doomscroll."));
+    groups.push(group("Super bans", "super", supers, "Locked 24/7. Undo takes a challenge and a 12h wait."));
     $("site-groups").replaceChildren(...groups);
 }
 

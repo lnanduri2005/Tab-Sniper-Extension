@@ -45,15 +45,15 @@
                 <section class="panel" id="panel-sites" role="tabpanel" aria-labelledby="tab-sites" hidden>
                     <h1 class="panel-title">Sites</h1>
                     <div class="columns">
-                        <div class="column" id="col-super">
-                            <div class="col-head" id="head-super"></div>
-                            <p class="col-note">Blocked around the clock. Undo takes a random challenge, a cool-off, and a final confirm.</p>
-                            <form class="add-row" id="super-form">
-                                <input class="field" id="super-input" placeholder="instagram.com" aria-label="Site to super ban" autocomplete="off">
-                                <button class="btn small" type="submit" id="super-add">Add</button>
+                        <div class="column" id="col-ban">
+                            <div class="col-head" id="head-ban"></div>
+                            <p class="col-note">Blocked while I'm awake or a focus session runs. Removable when I'm napping.</p>
+                            <form class="add-row" id="ban-form">
+                                <input class="field" id="ban-input" placeholder="reddit.com" aria-label="Site to ban" autocomplete="off">
+                                <button class="btn small cream" type="submit">Add</button>
                             </form>
-                            <p class="message" id="super-message" aria-live="polite"></p>
-                            <ul class="rows" id="super-list"></ul>
+                            <p class="message" id="ban-message" aria-live="polite"></p>
+                            <ul class="rows" id="ban-list"></ul>
                         </div>
                         <div class="column" id="col-watched">
                             <div class="col-head" id="head-watched"></div>
@@ -66,15 +66,15 @@
                             <p class="message" id="watch-message" aria-live="polite"></p>
                             <ul class="rows" id="watch-list"></ul>
                         </div>
-                        <div class="column" id="col-ban">
-                            <div class="col-head" id="head-ban"></div>
-                            <p class="col-note">Blocked while I'm awake or a focus session runs. Removable when I'm napping.</p>
-                            <form class="add-row" id="ban-form">
-                                <input class="field" id="ban-input" placeholder="reddit.com" aria-label="Site to ban" autocomplete="off">
-                                <button class="btn small cream" type="submit">Add</button>
+                        <div class="column" id="col-super">
+                            <div class="col-head" id="head-super"></div>
+                            <p class="col-note">Blocked around the clock. Undo takes a random challenge, a cool-off, and a final confirm.</p>
+                            <form class="add-row" id="super-form">
+                                <input class="field" id="super-input" placeholder="instagram.com" aria-label="Site to super ban" autocomplete="off">
+                                <button class="btn small" type="submit" id="super-add">Add</button>
                             </form>
-                            <p class="message" id="ban-message" aria-live="polite"></p>
-                            <ul class="rows" id="ban-list"></ul>
+                            <p class="message" id="super-message" aria-live="polite"></p>
+                            <ul class="rows" id="super-list"></ul>
                         </div>
                     </div>
                 </section>

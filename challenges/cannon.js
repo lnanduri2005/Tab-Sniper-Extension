@@ -1,4 +1,6 @@
-// Cannon into basket: land N shots in a row in a moving basket. A miss resets the streak.
+// Cannon into basket: aim with the mouse (or arrow keys), land N shots in a row in a moving basket.
+// A dotted guide shows the first part of the arc and fades out, so the landing is still a judgment call.
+// A miss resets the streak.
 // World coordinates are y-up with the ground at y = 0, units in px and seconds.
 import { el } from "./ui.js";
 
@@ -7,7 +9,8 @@ export const WORLD = { width: 480, height: 260 };
 export const MUZZLE_SPEED = 600;
 export const PIVOT = { x: 44, y: 24 };
 export const BARREL_LENGTH = 34;
-export const ANGLE_RANGE = { min: 20, max: 80, speed: 55 }; // degrees, degrees/sec
+export const ANGLE_RANGE = { min: 20, max: 80 }; // degrees
+export const GUIDE_FRACTION = 0.55; // share of the predicted flight the guide shows before fading out
 export const BASKET = { width: 44, height: 36, minX: 210, maxX: 450, speed: 70 };
 export const BALL_RADIUS = 5;
 
@@ -49,6 +52,27 @@ export function oscillate(value, dir, speed, min, max, dt) {
     return { value: next, dir: nextDir };
 }
 
+export function clampAngle(deg) {
+    return Math.min(ANGLE_RANGE.max, Math.max(ANGLE_RANGE.min, deg));
+}
+
+// Angle (degrees) from the cannon pivot to a point in world coordinates (y-up).
+export function aimAngle(x, y) {
+    return clampAngle((Math.atan2(y - PIVOT.y, Math.max(1, x - PIVOT.x)) * 180) / Math.PI);
+}
+
+// Points along the flight for a given angle, until the ball leaves the field.
+export function predictPath(angleDeg, gravity, dt = 1 / 60, maxSteps = 240) {
+    const points = [];
+    let ball = launch(angleDeg);
+    for (let i = 0; i < maxSteps; i++) {
+        points.push({ x: ball.x, y: ball.y });
+        ball = stepBall(ball, gravity, dt);
+        if (isOut(ball)) break;
+    }
+    return points;
+}
+
 function rr(ctx, x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -65,9 +89,9 @@ export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.r
     const css = getComputedStyle(document.documentElement);
     const C = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
     const ink = C("--m-ink", "#221f29");
-    const pal = { ink, screen: C("--m-screen", "#3a3743"), frame: C("--m-frame", "#c9c3d6"), cream: C("--m-cream", "#f2e8ca"), blush: C("--m-blush", "#ee93ab"), slate: C("--m-slate", "#5c6688"), ground: C("--surface", "#474452") };
+    const pal = { ink, screen: C("--m-screen", "#3a3743"), frame: C("--m-frame", "#c9c3d6"), cream: C("--m-cream", "#f2e8ca"), blush: C("--m-blush", "#ee93ab"), slate: C("--m-slate", "#5c6688"), ground: C("--surface", "#474452"), guide: C("--text", "#f2e8ca") };
 
-    let angle = { value: 45, dir: 1 };
+    let angle = 45;
     let basket = { value: BASKET.minX + rng() * (BASKET.maxX - BASKET.minX), dir: rng() < 0.5 ? -1 : 1 };
     let ball = null;
     let streak = 0;
@@ -88,7 +112,7 @@ export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.r
     function fire() {
         if (ball || done) return;
         shots += 1;
-        ball = launch(angle.value);
+        ball = launch(angle);
         render();
     }
 
@@ -142,10 +166,24 @@ export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.r
         ctx.beginPath(); ctx.ellipse(bx + 12, by + 22, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.ellipse(bx + BASKET.width - 12, by + 22, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
 
+        // aim guide: dots along the predicted arc, fading out partway
+        if (!ball && !done) {
+            const path = predictPath(angle, gravity);
+            const shown = Math.max(2, Math.floor(path.length * GUIDE_FRACTION));
+            ctx.fillStyle = pal.guide;
+            for (let i = 4; i < shown; i += 4) {
+                ctx.globalAlpha = 0.9 * (1 - i / shown);
+                ctx.beginPath();
+                ctx.arc(path[i].x, sy(path[i].y), 3.6, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+        }
+
         // cannon: charcoal barrel with a frame-colored muzzle ring, sitting on a base
         ctx.save();
         ctx.translate(PIVOT.x, sy(PIVOT.y));
-        ctx.rotate((-angle.value * Math.PI) / 180);
+        ctx.rotate((-angle * Math.PI) / 180);
         ctx.lineWidth = 3;
         ctx.strokeStyle = pal.ink;
         ctx.fillStyle = pal.screen;
@@ -180,9 +218,7 @@ export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.r
         last = now;
         if (!done) {
             basket = oscillate(basket.value, basket.dir, BASKET.speed, BASKET.minX, BASKET.maxX, dt);
-            if (!ball) {
-                angle = oscillate(angle.value, angle.dir, ANGLE_RANGE.speed, ANGLE_RANGE.min, ANGLE_RANGE.max, dt);
-            } else {
+            if (ball) {
                 const next = stepBall(ball, gravity, dt);
                 if (crossesBasketTop(ball, next, basket.value)) resolveShot(true);
                 else if (isOut(next)) resolveShot(false);
@@ -193,16 +229,34 @@ export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.r
         requestAnimationFrame(frame);
     }
 
-    canvas.addEventListener("pointerdown", fire);
+    function aimAt(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * WORLD.width;
+        const y = WORLD.height - ((e.clientY - rect.top) / rect.height) * WORLD.height;
+        if (!ball) angle = aimAngle(x, y);
+    }
+
+    canvas.addEventListener("pointermove", aimAt);
+    canvas.addEventListener("pointerdown", (e) => {
+        aimAt(e);
+        fire();
+    });
     canvas.addEventListener("keydown", (e) => {
+        const step = e.shiftKey ? 5 : 1.5;
         if (e.code === "Space" || e.code === "Enter") {
             e.preventDefault();
             fire();
+        } else if (e.code === "ArrowUp" || e.code === "ArrowLeft") {
+            e.preventDefault();
+            if (!ball) angle = clampAngle(angle + step);
+        } else if (e.code === "ArrowDown" || e.code === "ArrowRight") {
+            e.preventDefault();
+            if (!ball) angle = clampAngle(angle - step);
         }
     });
 
     root.replaceChildren(
-        el("p", { class: "challenge-help", text: `The cannon swings on its own. Click (or press Space) to fire. Land ${needed} in a row in the moving basket.` }),
+        el("p", { class: "challenge-help", text: `Aim with your mouse (or the arrow keys), then click or press Space to fire. The guide fades out, so lead the moving basket. Land ${needed} in a row.` }),
         progress,
         canvas,
         status

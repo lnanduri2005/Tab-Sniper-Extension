@@ -5,7 +5,7 @@ import { buildPassage, checkTyping, TARGET_CHARS, SENTENCES } from "../challenge
 import { makeProblem } from "../challenges/math.js";
 import { newSequence, extendSequence, checkInput, PADS } from "../challenges/memory.js";
 import {
-    launch, stepBall, crossesBasketTop, isOut, oscillate, BASKET, ANGLE_RANGE
+    launch, stepBall, crossesBasketTop, isOut, oscillate, BASKET, ANGLE_RANGE, aimAngle, clampAngle, predictPath, PIVOT
 } from "../challenges/cannon.js";
 
 test("typing passage reaches target length without repeats", () => {
@@ -71,4 +71,19 @@ test("cannon: whole basket range is reachable", () => {
             assert.ok(reachable, `basket at ${x} unreachable with g=${gravity}`);
         }
     }
+});
+
+test("cannon aiming clamps to the allowed range", () => {
+    assert.equal(clampAngle(5), ANGLE_RANGE.min);
+    assert.equal(clampAngle(95), ANGLE_RANGE.max);
+    assert.equal(Math.round(aimAngle(PIVOT.x + 100, PIVOT.y + 100)), 45);
+    assert.equal(aimAngle(PIVOT.x + 100, PIVOT.y - 50), ANGLE_RANGE.min, "aiming below the cannon clamps");
+});
+
+test("cannon guide follows the real flight", () => {
+    const path = predictPath(45, 800, 1 / 60);
+    let ball = launch(45);
+    for (let i = 0; i < 30; i++) ball = stepBall(ball, 800, 1 / 60);
+    assert.ok(Math.abs(path[30].x - ball.x) < 1e-9 && Math.abs(path[30].y - ball.y) < 1e-9);
+    assert.ok(path.length > 30);
 });
