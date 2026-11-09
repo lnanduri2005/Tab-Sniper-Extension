@@ -18,7 +18,9 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -30,8 +32,20 @@
   "options_page": "dashboard.html",
   "web_accessible_resources": [
     {
-      "resources": ["blocked.html"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "blocked.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    },
+    {
+      "resources": [
+        "fonts/mplus-rounded-1c-800.woff2"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "icons": {

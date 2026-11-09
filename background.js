@@ -16,7 +16,8 @@ import { lockChallenge, releaseChallenge } from "./challenges/index.js";
 import { PROFILES, newWatchedEntry, clampWatchField, findWatched } from "./lib/profiles.js";
 import { accrue, recordNav, evaluate, measure, emptyEntry, VISIT_GAP_MS } from "./lib/detector.js";
 import { startCooldown, inCooldown, nextCooldownMinutes, pruneCooldowns } from "./lib/cooldown.js";
-import { showToast } from "./lib/toast.js";
+import { siteMascot } from "./lib/sitemascot.js";
+import { statusFacts } from "./ui/status.js";
 import { logEvent, pruneLog, summarize, trend } from "./lib/stats.js";
 
 const BLOCK_PAGE = chrome.runtime.getURL("blocked.html");
@@ -26,6 +27,7 @@ const ALARM_SESSION_END = "session-end";
 const ALARM_PAUSE_PREFIX = "pause-end:";
 const ALARM_COOLDOWN_PREFIX = "cooldown-end:";
 const IDLE_SEC = 120;
+const CUTOFF_MS = 1600; // the mascot's on-page cutoff moment before the block page
 
 const SYNC_KEYS = ["enabled", "bans", "superBans", "watched", "settings", "pendingSettings", "removals", "challengeLocks", "presets"];
 const LOCAL_KEYS = [
@@ -103,14 +105,19 @@ function applyDecision(tabId, url, decision) {
     }
 }
 
+// Tabs playing the mascot's cutoff moment; their redirect waits until it finishes.
+const pendingCutoffs = new Map(); // tabId -> until (ms)
+const inCutoff = (tabId) => (pendingCutoffs.get(tabId) || 0) > Date.now();
+
 async function enforceOpenTabs(state, now) {
     const tabs = await chrome.tabs.query({});
     for (const tab of tabs) {
-        if (tab.url) applyDecision(tab.id, tab.url, decide(tab.url, state, now));
+        if (tab.url && !inCutoff(tab.id)) applyDecision(tab.id, tab.url, decide(tab.url, state, now));
     }
 }
 
 async function checkNavigation(tabId, url, { closeOnly = false } = {}) {
+    if (inCutoff(tabId)) return;
     const decision = decide(url, await loadState(), Date.now());
     if (closeOnly && decision.action !== "close") return;
     applyDecision(tabId, url, decision);
@@ -202,6 +209,7 @@ async function watchStep(nav = null) {
 
     let { cooldowns, trips } = state;
     const toasts = [];
+    const cutoffs = [];
     for (const { w, tabId } of touched.values()) {
         const result = evaluate(watch[w.domain], w, now);
         watch[w.domain] = result.entry;
@@ -210,8 +218,12 @@ async function watchStep(nav = null) {
             watch[w.domain] = emptyEntry();
             bumpStat("trips", w.domain);
             chrome.alarms.create(`${ALARM_COOLDOWN_PREFIX}${w.domain}`, { when: cooldowns[w.domain].until });
+            if (tabId != null) {
+                pendingCutoffs.set(tabId, now + CUTOFF_MS + 400); // before the write that triggers enforcement
+                cutoffs.push({ tabId });
+            }
         } else if (result.warn) {
-            toasts.push({ tabId, text: `${result.warn.text}. I cut you off at the limit.` });
+            toasts.push({ tabId, text: `${result.warn.text}. Easy there, I cut you off at the limit.` });
         }
     }
 
@@ -220,10 +232,21 @@ async function watchStep(nav = null) {
     if (cooldowns !== state.cooldowns) Object.assign(update, { cooldowns, trips });
     await chrome.storage.local.set(update);
 
+    const fontUrl = chrome.runtime.getURL("fonts/mplus-rounded-1c-800.woff2");
     for (const { tabId, text } of toasts) {
-        chrome.scripting
-            .executeScript({ target: { tabId }, func: showToast, args: ["Easy there.", text] })
-            .catch(() => {});
+        chrome.scripting.executeScript({ target: { tabId }, func: siteMascot, args: ["peek", text, fontUrl] }).catch(() => {});
+    }
+    for (const { tabId } of cutoffs) {
+        chrome.scripting.executeScript({ target: { tabId }, func: siteMascot, args: ["cutoff", "That's enough.", fontUrl] }).catch(() => {});
+        setTimeout(async () => {
+            pendingCutoffs.delete(tabId);
+            try {
+                const tab = await chrome.tabs.get(tabId);
+                if (tab.url) applyDecision(tabId, tab.url, decide(tab.url, await loadState(), Date.now()));
+            } catch {
+                /* tab closed */
+            }
+        }, CUTOFF_MS);
     }
 }
 
@@ -427,6 +450,11 @@ const handlers = {
             watched: state.watched.map((w) => (w.domain === domain ? { ...w, [field]: clamped } : w))
         });
         return { ok: true, value: clamped };
+    },
+
+    async statusFacts() {
+        const res = await handlers.getState();
+        return { ok: true, ...statusFacts(res, Date.now()) };
     },
 
     async toggle({ enabled }) {
