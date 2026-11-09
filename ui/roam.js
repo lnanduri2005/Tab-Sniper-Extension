@@ -33,7 +33,7 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
     let wanderTimer = null;
     let holdStill = still;
     let busy = false;
-    // Asleep: tucked away on one perch, no wandering, no dragging, no speech bubbles.
+    // Asleep: tucked away (or wherever it's dragged to), no wandering, no speech bubbles.
     let asleep = false;
     let sleepId = null;
 
@@ -164,10 +164,10 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
         if (bubbleWasOpen && !bubble.hidden) bubble.classList.add("show");
     }
 
-    function goTo(id, { mood: m, say: text, instant = false, announce = true } = {}) {
+    function goTo(id, { mood: m, say: text, instant = false, announce = true, toBed = false } = {}) {
         if (asleep) {
-            // every request while asleep means "stay in bed"
-            if (currentId === sleepId && pos.x > -5000) return;
+            // while asleep it stays where it is; only going to bed (or first placement) moves it
+            if (!toBed && pos.x > -5000) return;
             id = sleepId;
             m = null;
             text = null;
@@ -206,7 +206,7 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
     let drag = null;
 
     el.addEventListener("pointerdown", (e) => {
-        if (e.button !== 0 || asleep) return;
+        if (e.button !== 0) return;
         drag = { startX: e.clientX, startY: e.clientY, offX: e.pageX - pos.x, offY: e.pageY - pos.y, samples: [], moved: false };
         el.setPointerCapture(e.pointerId);
     });
@@ -362,7 +362,7 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
             if (asleep) {
                 hideBubble();
                 clearTimeout(wanderTimer);
-                if (perches.length) goTo(sleepId);
+                if (perches.length) goTo(sleepId, { toBed: true });
             } else {
                 scheduleWander();
             }
