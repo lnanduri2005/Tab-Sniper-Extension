@@ -64,3 +64,8 @@ test("resolvePending applies due changes only", () => {
     assert.equal(r.pending.length, 1);
     assert.ok(r.changed);
 });
+
+test("soundOn is a free boolean", () => {
+    assert.equal(requestSettingChange(settings, [], "soundOn", true, NOW).settings.soundOn, true);
+    assert.equal(requestSettingChange(settings, [], "soundOn", "yes", NOW).status, "invalid");
+});

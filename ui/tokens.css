@@ -1,0 +1,114 @@
+/* Tab Sniper design tokens. Every color comes from the mascot.
+   To restyle later, change values here (or add a [data-theme="..."] block). */
+
+@font-face {
+    font-family: "M PLUS Rounded 1c";
+    font-weight: 400;
+    font-display: swap;
+    src: url("../fonts/mplus-rounded-1c-400.woff2") format("woff2");
+}
+@font-face {
+    font-family: "M PLUS Rounded 1c";
+    font-weight: 700;
+    font-display: swap;
+    src: url("../fonts/mplus-rounded-1c-700.woff2") format("woff2");
+}
+@font-face {
+    font-family: "M PLUS Rounded 1c";
+    font-weight: 800;
+    font-display: swap;
+    src: url("../fonts/mplus-rounded-1c-800.woff2") format("woff2");
+}
+
+:root {
+    /* mascot palette (fixed in both themes) */
+    --m-ink: #221f29;        /* outline */
+    --m-screen: #3a3743;     /* face screen */
+    --m-frame: #c9c3d6;      /* window frame */
+    --m-frame-deep: #a59eb6;
+    --m-cream: #f2e8ca;      /* title bar */
+    --m-cream-deep: #e2d4ab;
+    --m-blush: #ee93ab;
+    --m-blush-deep: #d96784;
+    --m-slate: #5c6688;
+    --m-slate-light: #9aa4c8;
+    --m-white: #fdfcff;
+
+    /* type */
+    --font: "M PLUS Rounded 1c", ui-rounded, system-ui, sans-serif;
+    --fs-xs: 12px;
+    --fs-sm: 13px;
+    --fs-md: 15px;
+    --fs-lg: 18px;
+    --fs-xl: 24px;
+    --fs-2xl: 34px;
+    --fs-3xl: 56px;
+
+    /* line art */
+    --line: 2.5px;
+    --line-heavy: 3.5px;
+    --press: 4px;            /* hard offset buttons press into (mascot sticker style) */
+    --r-sm: 10px;
+    --r-md: 14px;
+    --r-lg: 20px;
+    --r-pill: 999px;
+
+    /* spacing */
+    --s1: 4px;
+    --s2: 8px;
+    --s3: 12px;
+    --s4: 16px;
+    --s5: 24px;
+    --s6: 32px;
+    --s7: 48px;
+
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+    /* dark theme (default): the mascot's screen is the ground */
+    --bg: var(--m-screen);
+    --surface: #474452;
+    --surface-2: #53505f;
+    --text: var(--m-cream);
+    --text-muted: #cdc7da;
+    --outline: #17151c;
+    --title: var(--m-cream);
+    --title-text: var(--m-ink);
+    --accent: var(--m-blush);
+    --accent-text: var(--m-ink);
+    --secondary: var(--m-slate-light);
+    --danger: var(--m-blush-deep);
+    --focus: var(--m-blush);
+    --selection: rgba(238, 147, 171, 0.45);
+    color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+        --bg: #e6e2ee;
+        --surface: var(--m-white);
+        --surface-2: #f1eef6;
+        --text: var(--m-ink);
+        --text-muted: #565168;
+        --outline: var(--m-ink);
+        --secondary: var(--m-slate);
+        --danger: #c24d6c;
+        --focus: var(--m-slate);
+        --selection: rgba(92, 102, 136, 0.3);
+        color-scheme: light;
+    }
+}
+
+:root[data-theme="light"] {
+    --bg: #e6e2ee;
+    --surface: var(--m-white);
+    --surface-2: #f1eef6;
+    --text: var(--m-ink);
+    --text-muted: #565168;
+    --outline: var(--m-ink);
+    --secondary: var(--m-slate);
+    --danger: #c24d6c;
+    --focus: var(--m-slate);
+    --selection: rgba(92, 102, 136, 0.3);
+    color-scheme: light;
+}
