@@ -34,8 +34,12 @@
 .roam-bubble[data-side="top"] { transform-origin: center bottom; }
 
 /* tail points back at the mascot */
-.roam-bubble[data-side="left"]::after { left: auto; right: -11px; bottom: auto; top: 50%; transform: translateY(-50%) rotate(-45deg); }
-.roam-bubble[data-side="right"]::after { left: -11px; bottom: auto; top: 50%; transform: translateY(-50%) rotate(135deg); }
+.roam-bubble[data-side="left"]::after { left: auto; right: -8.5px; bottom: auto; top: 50%; transform: translateY(-50%) rotate(-45deg); }
+.roam-bubble[data-side="right"]::after { left: -8.5px; bottom: auto; top: 50%; transform: translateY(-50%) rotate(135deg); }
+/* side bubbles are one or two lines tall: a smaller tail and squarer corners keep the tail
+   from swallowing the bubble and meeting the curve with a notch */
+.roam-bubble[data-side="left"], .roam-bubble[data-side="right"] { border-radius: 12px; }
+.roam-bubble[data-side="left"]::after, .roam-bubble[data-side="right"]::after { width: 12px; height: 12px; border-bottom-right-radius: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
     .roam-bubble { transition: opacity 0.01ms; }

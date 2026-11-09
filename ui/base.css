@@ -234,7 +234,8 @@ input[type="number"].field { border-radius: var(--r-md); width: 84px; text-align
     transform: translateX(-50%) rotate(45deg);
     border-bottom-right-radius: 4px;
 }
-.bubble.side::after { left: -11px; top: 50%; bottom: auto; transform: translateY(-50%) rotate(135deg); }
+.bubble.side { border-radius: 12px; }
+.bubble.side::after { left: -8.5px; top: 50%; bottom: auto; width: 12px; height: 12px; border-bottom-right-radius: 2px; transform: translateY(-50%) rotate(135deg); }
 
 .message:empty { display: none; }
 .message { min-height: 20px; font-size: var(--fs-sm); font-weight: 700; color: var(--note); }
