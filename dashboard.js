@@ -40,13 +40,16 @@ async function refresh() {
     mascot.setMood(state.timer ? "idle" : state.bansActive ? "mischievous" : "sleep");
     renderOverview();
     renderStats();
-    // Don't yank a field out from under someone mid-edit.
-    const editing = document.activeElement?.matches?.("input, select");
-    if (!editing) {
-        renderSites();
-        renderFocus();
-        renderSettings();
-    }
+    // Don't redraw a region while someone is editing a field inside it (Watched limits,
+    // focus timer, settings). The add forms live outside these regions, so lists always update.
+    const editingIn = (id) => {
+        const active = document.activeElement;
+        return !!active?.matches?.("input, select") && !!active.closest(`#${id}`);
+    };
+    if (editingIn("watch-list")) renderSiteLists({ skipWatched: true });
+    else renderSites();
+    if (!editingIn("focus-box")) renderFocus();
+    if (!editingIn("settings")) renderSettings();
 }
 
 // ---------- overview ----------
@@ -207,12 +210,18 @@ function watchRow(w) {
 }
 
 function renderSites() {
+    renderSiteLists();
+}
+
+function renderSiteLists({ skipWatched = false } = {}) {
     colHead("head-super", "super", "Super bans", state.superBans.length);
     colHead("head-watched", "watched", "Watched", state.watched.length);
     colHead("head-ban", "ban", "Bans", state.bans.length);
 
     $("super-list").replaceChildren(...(state.superBans.length ? state.superBans.map(superRow) : [el("li", { class: "empty", text: "No super bans yet." })]));
-    $("watch-list").replaceChildren(...(state.watched.length ? state.watched.map(watchRow) : [el("li", { class: "empty", text: "Nothing watched yet. YouTube and Instagram are good places to start." })]));
+    if (!skipWatched) {
+        $("watch-list").replaceChildren(...(state.watched.length ? state.watched.map(watchRow) : [el("li", { class: "empty", text: "Nothing watched yet. YouTube and Instagram are good places to start." })]));
+    }
     $("ban-list").replaceChildren(
         ...(state.bans.length
             ? state.bans.map((d) =>
