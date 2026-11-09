@@ -45,6 +45,8 @@ body { overflow-x: clip; }
 #watch-input { flex-basis: 100%; order: 3; }
 #pending-box { margin-top: var(--s5); }
 .column .row { flex-wrap: wrap; }
+/* keep the site name readable: when buttons don't fit beside it, they wrap below instead of squeezing it */
+.column .row > .grow { flex: 1 1 150px; }
 .limits { display: flex; gap: var(--s3); flex-wrap: wrap; width: 100%; padding-top: var(--s2); border-top: var(--line) dashed var(--surface-2); }
 .limits label { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-muted); font-weight: 700; }
 .limits input.field { width: 64px; padding: 4px 6px; font-size: var(--fs-sm); }

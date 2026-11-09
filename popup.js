@@ -2,6 +2,8 @@ import { send, formatDuration } from "./lib/api.js";
 import { extractDomain, domainMatches } from "./lib/match.js";
 import { createMascot } from "./ui/mascot.js";
 import { createTapper } from "./ui/status.js";
+import { confirmBox } from "./ui/confirm.js";
+import { normalizeDomain } from "./lib/match.js";
 import { say } from "./ui/voice.js";
 import { ICONS } from "./ui/icons.js";
 import { loadSoundSetting, play } from "./ui/sound.js";
@@ -13,7 +15,6 @@ let hereDomain = null;
 let tick = null;
 let selectedMinutes = 25;
 let lastLineKey = "";
-let pendingSuper = null;
 
 const mascot = createMascot({ variant: "face", mood: "sleep", idle: { boredMs: 25000, sleepMs: 60000 }, onTap: () => onTap() });
 $("face-slot").append(mascot.el);
@@ -328,48 +329,36 @@ async function addSite(input, tier) {
     return res;
 }
 
-const SUPER_WARNING = "Super bans block 24/7. Undoing one takes a random challenge plus a cool-off.";
+// Adding a super ban is the one add that's expensive to undo, so it always asks first.
+async function confirmSuper(input) {
+    const domain = normalizeDomain(input) || input;
+    mascot.express("stern", 4000);
+    return confirmBox({
+        title: `Super ban ${domain}?`,
+        body: `It's blocked 24/7, even while I nap. Undoing it takes a random challenge and a ${state.settings.coolOffHours}h wait.`,
+        confirmLabel: "Lock it",
+        tone: "super",
+        mascot: { mood: "stern", line: "You sure? I don't let these go easily." }
+    });
+}
 
 $("add-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = $("add-input").value.trim();
     const tier = new FormData(e.target).get("tier");
     if (!input) return;
-    if (tier === "super" && pendingSuper !== input) {
-        pendingSuper = input;
-        $("add-btn").textContent = "Confirm";
-        $("sites-message").textContent = SUPER_WARNING;
-        mascot.express("surprised", 1500);
-        return;
-    }
-    pendingSuper = null;
-    $("add-btn").textContent = "Add";
+    if (tier === "super" && !(await confirmSuper(input))) return;
     const res = await addSite(input, tier);
     if (!res.ok) return sitesError(res.error);
     $("add-input").value = "";
     $("sites-message").textContent = `${res.domain} added.`;
 });
 
-$("add-form").addEventListener("change", () => {
-    pendingSuper = null;
-    $("add-btn").textContent = "Add";
-});
-
 $("here-actions").addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-tier]");
     if (!btn || !hereDomain) return;
     const tier = btn.dataset.tier;
-    if (tier === "super" && !btn.classList.contains("confirming")) {
-        btn.classList.add("confirming");
-        btn.textContent = "Tap again: 24/7";
-        btn.title = SUPER_WARNING;
-        mascot.express("surprised", 1500);
-        setTimeout(() => {
-            btn.classList.remove("confirming");
-            btn.textContent = "Super ban";
-        }, 4000);
-        return;
-    }
+    if (tier === "super" && !(await confirmSuper(hereDomain))) return;
     const res = await addSite(hereDomain, tier);
     if (!res.ok) {
         flash(btn);

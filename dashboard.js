@@ -3,6 +3,8 @@ import { SETTING_LIMITS } from "./lib/defaults.js";
 import { createRoamer } from "./ui/roam.js";
 import { createTapper } from "./ui/status.js";
 import { CHALLENGE_LABELS } from "./challenges/index.js";
+import { confirmBox } from "./ui/confirm.js";
+import { normalizeDomain } from "./lib/match.js";
 import { say } from "./ui/voice.js";
 import { ICONS } from "./ui/icons.js";
 import { loadSoundSetting, setSoundEnabled, play } from "./ui/sound.js";
@@ -12,7 +14,6 @@ import { tierChip, tierIcon, iconButton, TIER_NAMES } from "./ui/tiers.js";
 let state = null;
 let tab = "overview";
 let selectedMinutes = 25;
-let pendingSuper = null;
 let focusTick = null;
 let watchChoice = null;
 
@@ -169,18 +170,14 @@ function superRow(b) {
         }));
     }
     if (b.removalStatus === "due") {
-        actions.push(btn("Confirm removal", "danger", async (e) => {
-            const target = e.currentTarget;
-            if (!target.dataset.armed) {
-                target.dataset.armed = "1";
-                target.textContent = "Really remove?";
-                corner("Last chance to change your mind.", "nervous", 3000);
-                setTimeout(() => {
-                    delete target.dataset.armed;
-                    target.textContent = "Confirm removal";
-                }, 4000);
-                return;
-            }
+        actions.push(btn("Confirm removal", "danger", async () => {
+            mascot.express("nervous", 4000);
+            const ok = await confirmBox({
+                title: `Remove the super ban on ${b.domain}?`,
+                confirmLabel: "Remove",
+                tone: "danger"
+            });
+            if (!ok) return corner("Good call.", "happy");
             const r = await send("confirmRemoval", { domain: b.domain });
             if (!r.ok) return say$("super-message", r.error, true);
             corner("Fine. It's gone. I'll miss guarding it.", "grudging", 3000);
@@ -303,25 +300,22 @@ $("super-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = $("super-input").value.trim();
     if (!input) return;
-    if (pendingSuper !== input) {
-        pendingSuper = input;
-        $("super-add").textContent = "Confirm";
-        say$("super-message", `Blocks it 24/7. Undoing takes a challenge plus a ${state.settings.coolOffHours}h cool-off. Press Confirm to lock it in.`);
-        corner("You sure? This one's serious.", "surprised", 2400, "col-super");
-        return;
-    }
-    pendingSuper = null;
-    $("super-add").textContent = "Add";
+    const domain = normalizeDomain(input) || input;
+    roamer.goTo("col-super", { mood: "stern" });
+    const ok = await confirmBox({
+        title: `Super ban ${domain}?`,
+        body: `It's blocked 24/7, even while I nap. Undoing it takes a random challenge and a ${state.settings.coolOffHours}h wait.`,
+        confirmLabel: "Lock it",
+        tone: "super",
+        mascot: { mood: "stern", line: "You sure? I don't let these go easily." }
+    });
+    if (!ok) return;
     const r = await send("addSuperBan", { input });
     if (!r.ok) return say$("super-message", r.error, true);
     $("super-input").value = "";
     say$("super-message", `${r.domain} is locked.`);
     corner(`${r.domain} is in the vault now.`, "stern", 2600, "col-super");
     play("deny");
-});
-$("super-input").addEventListener("input", () => {
-    pendingSuper = null;
-    $("super-add").textContent = "Add";
 });
 
 // ---------- focus ----------
