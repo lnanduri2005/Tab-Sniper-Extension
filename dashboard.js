@@ -230,30 +230,33 @@ function superRow(b) {
     ]);
 }
 
+// Each limit reads as a sentence ending "...and I cut you off": "15 min on the site in one visit".
 const WATCH_FIELDS = [
-    { key: "visitLimitMin", label: "min per visit" },
-    { key: "streakLimitMin", label: "min short-form" },
-    { key: "swipeLimit", label: "swipes" }
+    { key: "visitLimitMin", kind: "visit", label: () => "min on the site in one visit" },
+    { key: "streakLimitMin", kind: "streak", label: (w) => `min straight on ${w.noun === "feed" ? "the feed" : w.noun || "short videos"}` },
+    { key: "swipeLimit", kind: "swipes", label: (w) => `${w.noun === "feed" ? "posts" : w.noun || "videos"} within ${w.swipeWindowMin} min` }
 ];
 
 function watchMeta(w) {
     if (w.cooldown) return `Cooldown, ${formatDuration(w.cooldown.until - Date.now())} left (${w.cooldown.reason}). Locked until it ends.`;
-    const names = { visit: "visit", streak: "short-form", swipes: "swipes" };
-    const parts = w.usage.map((m) => `${names[m.kind]} ${Math.floor(m.used)}/${m.limit}`);
-    return `${w.label || "custom"} · ${parts.join(" · ")}${w.tripsToday ? ` · ${w.tripsToday} cutoffs today` : ""}`;
+    const many = WATCH_FIELDS.filter((f) => f.key in w).length > 1;
+    const lead = many ? "Cut off at whichever comes first:" : "Cut off after:";
+    return `${w.label ? `${w.label} · ` : ""}${lead}${w.tripsToday ? ` (${w.tripsToday} cutoffs today)` : ""}`;
 }
 
 function watchRow(w) {
     const cooling = !!w.cooldown;
     const limits = WATCH_FIELDS.filter((f) => f.key in w).map((f) => {
-        const input = el("input", { class: "field", type: "number", value: String(w[f.key]), "aria-label": `${w.domain} ${f.label}` });
+        const label = f.label(w);
+        const used = w.usage.find((m) => m.kind === f.kind);
+        const input = el("input", { class: "field", type: "number", value: String(w[f.key]), "aria-label": `${w.domain}: cut off after this many ${label}` });
         input.disabled = cooling;
         input.addEventListener("change", async () => {
             const r = await send("updateWatched", { domain: w.domain, field: f.key, value: input.value });
-            say$("watch-message", r.ok ? `${w.domain}: ${r.value} ${f.label}.` : r.error, !r.ok);
+            say$("watch-message", r.ok ? `${w.domain}: cut off after ${r.value} ${label}.` : r.error, !r.ok);
             if (r.ok) mascot.react("nod");
         });
-        return el("label", {}, [input, f.label]);
+        return el("label", {}, [input, el("span", { class: "limit-text", text: label }), used && !cooling ? el("span", { class: "limit-now", text: `now ${Math.floor(used.used)}` }) : null]);
     });
     return el("li", { class: "row" }, [
         el("div", { class: "grow" }, [el("div", { class: "name", text: w.domain }), el("div", { class: `meta ${cooling ? "hot" : ""}`, text: watchMeta(w) })]),

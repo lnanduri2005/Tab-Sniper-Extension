@@ -417,6 +417,7 @@ const handlers = {
             watched: state.watched.map((w) => ({
                 ...w,
                 label: PROFILES[w.profile]?.label || null,
+                noun: PROFILES[w.profile]?.noun || null,
                 cooldown: inCooldown(state.cooldowns, w.domain, now) ? state.cooldowns[w.domain] : null,
                 usage: measure(liveEntry(state.watch[w.domain], now), w, now),
                 tripsToday: readDaily(state.trips, day, w.domain)
