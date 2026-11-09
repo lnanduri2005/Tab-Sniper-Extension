@@ -5,6 +5,7 @@ import { say } from "./ui/voice.js";
 import { ICONS } from "./ui/icons.js";
 import { loadSoundSetting, play } from "./ui/sound.js";
 import { el, $, flash } from "./ui/dom.js";
+import { tierChip, tierIcon, iconButton, TIER_NAMES } from "./ui/tiers.js";
 
 let state = null;
 let hereDomain = null;
@@ -94,17 +95,6 @@ function renderWake() {
     else btn.innerHTML = `${ICONS.sun}<span>Wake up</span>`;
 }
 
-const TIER_ICONS = { ban: ICONS.ban, watched: ICONS.eye, super: ICONS.lock };
-const TIER_NAMES = { ban: "Ban", watched: "Watched", super: "Super ban" };
-
-function tierChip(tier) {
-    return el("span", { class: `tier ${tier}`, html: `${TIER_ICONS[tier]}<span>${TIER_NAMES[tier]}</span>` });
-}
-
-function tierIcon(tier) {
-    return el("span", { class: `tier icon-only ${tier}`, role: "img", "aria-label": TIER_NAMES[tier], title: TIER_NAMES[tier], html: TIER_ICONS[tier] });
-}
-
 function renderHere() {
     const box = $("here");
     box.hidden = !hereDomain;
@@ -169,7 +159,7 @@ function renderFocus() {
     $("focus-running").hidden = !running;
     if (!running) {
         $("clock").textContent = `${String(selectedMinutes).padStart(2, "0")}:00`;
-        $("strip-fill").style.width = "0%";
+        $("strip-fill").style.transform = "scaleX(0)";
         renderChips();
         $("start-focus").innerHTML = `${ICONS.play}<span>Start ${selectedMinutes} min</span>`;
         return;
@@ -179,7 +169,7 @@ function renderFocus() {
         const { startTime, endTime } = state.timer;
         const left = endTime - Date.now();
         $("clock").textContent = formatDuration(left);
-        $("strip-fill").style.width = `${Math.min(100, ((Date.now() - startTime) / (endTime - startTime)) * 100)}%`;
+        $("strip-fill").style.transform = `scaleX(${Math.min(1, (Date.now() - startTime) / (endTime - startTime))})`;
         if (left <= 0) {
             clearInterval(tick);
             setTimeout(refresh, 1200);
@@ -265,12 +255,6 @@ function siteRow(tier, domain, meta, action) {
     ]);
 }
 
-function iconButton(iconName, label, onclick, disabled, title) {
-    const b = el("button", { class: "icon-btn", "aria-label": label, title: title || label, html: ICONS[iconName], onclick });
-    b.disabled = !!disabled;
-    return b;
-}
-
 function renderSites() {
     const groups = [];
     const now = Date.now();
@@ -287,14 +271,14 @@ function renderSites() {
                 const r = await send("removeWatched", { domain: w.domain });
                 if (!r.ok) return sitesError(r.error);
                 mascot.express("grudging", 1400);
-            }, !!w.cooldown, w.cooldown ? "Locked until the cooldown ends" : null))
+            }, { disabled: !!w.cooldown, title: w.cooldown ? "Locked until the cooldown ends" : null }))
     );
     const bans = state.bans.map((d) =>
         siteRow("ban", d, null, iconButton("x", `Remove ${d}`, async () => {
             const r = await send("removeBan", { domain: d });
             if (!r.ok) return sitesError(r.error);
             mascot.express("grudging", 1400);
-        }, state.bansActive, state.bansActive ? "Nap first to remove bans" : null))
+        }, { disabled: state.bansActive, title: state.bansActive ? "Nap first to remove bans" : null }))
     );
 
     const group = (title, tier, items, emptyText) =>

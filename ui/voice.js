@@ -53,7 +53,13 @@ export const LINES = {
     "home.on": ["Awake. Try me.", "On duty.", "{n} tries today. I'm counting.", "{site} again? I noticed."],
     "home.calm": ["Awake. Nobody's tried anything yet.", "Quiet day. Suspicious.", "On duty. All clear."],
     "home.focus": ["{left} left. You're doing great.", "Locked in. Keep going.", "Focus time. I've got the door."],
-    "home.empty": ["Give me something to guard.", "No sites yet. Ban one from the Sites tab."]
+    "home.empty": ["Give me something to guard.", "No sites yet. Ban one from the Sites tab."],
+    "dash.hello": ["Welcome back. Here's the damage.", "Let's see how you did.", "Command center. Mine, technically."],
+    "stats.none": ["Nothing in 30 days. Either you're a monk or I'm new here."],
+    "stats.first": ["First week on the books. I'm watching the trend."],
+    "stats.down": ["Down {pct}% from last week. Suspicious.", "{pct}% fewer tries than last week. Who are you?"],
+    "stats.up": ["Up {pct}% from last week. We need to talk.", "More tries than last week. I noticed."],
+    "stats.flat": ["About the same as last week. Steady. Too steady."]
 };
 
 let lastPicked = {};

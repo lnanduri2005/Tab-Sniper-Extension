@@ -193,6 +193,23 @@ input[type="number"].field { border-radius: var(--r-md); width: 84px; text-align
 .tier.icon-only { padding: 6px; width: 30px; height: 30px; justify-content: center; margin: 0 4px; flex: none; }
 .tier.hot { background: var(--m-blush); color: var(--m-ink); }
 
+.icon-btn {
+    width: 30px; height: 30px;
+    display: grid; place-items: center;
+    flex: none;
+    color: var(--text);
+    background: transparent;
+    border: var(--line) solid var(--outline);
+    border-radius: 50%;
+    cursor: pointer;
+}
+.icon-btn:hover:not(:disabled) { background: var(--surface-2); }
+.icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.icon-btn svg { width: 15px; height: 15px; }
+
+.icon { display: inline-block; width: 16px; height: 16px; flex: none; }
+.icon svg { width: 100%; height: 100%; display: block; }
+
 /* ---------- speech bubble ---------- */
 
 .bubble {

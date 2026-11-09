@@ -4,55 +4,123 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Tab Sniper Dashboard</title>
-    <link rel="stylesheet" href="pages.css">
+    <link rel="stylesheet" href="ui/tokens.css">
+    <link rel="stylesheet" href="ui/base.css">
+    <link rel="stylesheet" href="ui/mascot.css">
+    <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
-    <main>
-        <img src="icon_mischiveous.png" class="mascot" alt="">
-        <h1>Tab Sniper</h1>
-        <p class="lead">Manage bans, super bans and settings.</p>
+    <div class="dash-wrap">
+        <div class="window dash">
+            <div class="titlebar">
+                <div class="dots" aria-hidden="true"><span class="dot pink"></span><span class="dot slate"></span></div>
+                <div class="tabs" role="tablist" aria-label="Dashboard sections">
+                    <button class="tab" role="tab" id="tab-overview" aria-controls="panel-overview">Overview</button>
+                    <button class="tab" role="tab" id="tab-sites" aria-controls="panel-sites">Sites</button>
+                    <button class="tab" role="tab" id="tab-focus" aria-controls="panel-focus">Focus</button>
+                    <button class="tab" role="tab" id="tab-stats" aria-controls="panel-stats">Stats</button>
+                    <button class="tab" role="tab" id="tab-settings" aria-controls="panel-settings">Settings</button>
+                </div>
+                <span class="app-name">Tab Sniper</span>
+            </div>
 
-        <section class="card">
-            <h2>Super bans</h2>
-            <p class="muted">Blocked 24/7, even when Tab Sniper is off. Removing one takes a random challenge plus a cool-off.</p>
-            <form class="row" id="super-form" style="margin: 14px 0;">
-                <input type="text" id="super-input" placeholder="instagram.com" style="flex:1;" aria-label="Site to super ban">
-                <button class="btn" type="submit">Super ban</button>
-            </form>
-            <div class="message" id="super-message"></div>
-            <ul class="list" id="super-list"></ul>
-        </section>
+            <div class="screen">
+                <section class="panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+                    <h1 class="panel-title">Today</h1>
+                    <div class="split">
+                        <div>
+                            <ul class="rows" id="today"></ul>
+                        </div>
+                        <div class="side">
+                            <h2>This week</h2>
+                            <ul class="sentences" id="week"></ul>
+                            <div id="pending-box" hidden>
+                                <h2>Waiting on you</h2>
+                                <ul class="rows" id="pending"></ul>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
-        <section class="card">
-            <h2>Watched sites</h2>
-            <p class="muted">Allowed, but cut off when you doomscroll: too long in one visit, too long on Shorts/Reels/feeds, or too many swipes. Warns at 80%, then a cooldown that doubles with each trip today.</p>
-            <form class="row" id="watch-form" style="margin: 14px 0;">
-                <select id="watch-profile" aria-label="Site to watch"></select>
-                <input type="text" id="watch-input" placeholder="news.ycombinator.com" style="flex:1;" aria-label="Custom domain to watch" hidden>
-                <button class="btn" type="submit">Watch</button>
-            </form>
-            <div class="message" id="watch-message"></div>
-            <ul class="list" id="watch-list"></ul>
-        </section>
+                <section class="panel" id="panel-sites" role="tabpanel" aria-labelledby="tab-sites" hidden>
+                    <h1 class="panel-title">Sites</h1>
+                    <div class="columns">
+                        <div class="column" id="col-super">
+                            <div class="col-head" id="head-super"></div>
+                            <p class="col-note">Blocked around the clock. Undo takes a random challenge, a cool-off, and a final confirm.</p>
+                            <form class="add-row" id="super-form">
+                                <input class="field" id="super-input" placeholder="instagram.com" aria-label="Site to super ban" autocomplete="off">
+                                <button class="btn small" type="submit" id="super-add">Add</button>
+                            </form>
+                            <p class="message" id="super-message" aria-live="polite"></p>
+                            <ul class="rows" id="super-list"></ul>
+                        </div>
+                        <div class="column" id="col-watched">
+                            <div class="col-head" id="head-watched"></div>
+                            <p class="col-note">Allowed, but cut off when you doomscroll. Warns at 80%, then a cooldown that doubles each trip.</p>
+                            <form class="add-row" id="watch-form">
+                                <select class="field" id="watch-profile" aria-label="Site to watch"></select>
+                                <input class="field" id="watch-input" placeholder="news.ycombinator.com" aria-label="Custom domain" autocomplete="off" hidden>
+                                <button class="btn small slate" type="submit">Watch</button>
+                            </form>
+                            <p class="message" id="watch-message" aria-live="polite"></p>
+                            <ul class="rows" id="watch-list"></ul>
+                        </div>
+                        <div class="column" id="col-ban">
+                            <div class="col-head" id="head-ban"></div>
+                            <p class="col-note">Blocked while I'm awake or a focus session runs. Removable when I'm napping.</p>
+                            <form class="add-row" id="ban-form">
+                                <input class="field" id="ban-input" placeholder="reddit.com" aria-label="Site to ban" autocomplete="off">
+                                <button class="btn small cream" type="submit">Add</button>
+                            </form>
+                            <p class="message" id="ban-message" aria-live="polite"></p>
+                            <ul class="rows" id="ban-list"></ul>
+                        </div>
+                    </div>
+                </section>
 
-        <section class="card">
-            <h2>Bans</h2>
-            <p class="muted">Blocked while Tab Sniper is on or a focus session runs. Removable when it's off.</p>
-            <form class="row" id="ban-form" style="margin: 14px 0;">
-                <input type="text" id="ban-input" placeholder="reddit.com" style="flex:1;" aria-label="Site to ban">
-                <button class="btn" type="submit">Ban</button>
-            </form>
-            <div class="message" id="ban-message"></div>
-            <ul class="list" id="ban-list"></ul>
-        </section>
+                <section class="panel" id="panel-focus" role="tabpanel" aria-labelledby="tab-focus" hidden>
+                    <h1 class="panel-title">Focus</h1>
+                    <div class="split">
+                        <div class="focus-box" id="focus-box"></div>
+                        <div class="side">
+                            <h2>Recent sessions</h2>
+                            <ul class="rows" id="history"></ul>
+                        </div>
+                    </div>
+                </section>
 
-        <section class="card">
-            <h2>Settings</h2>
-            <p class="muted">Making super bans easier (shorter wait, bigger cap, shorter cool-off) only takes effect after the current cool-off. Making them stricter applies instantly.</p>
-            <ul class="list" id="settings-list" style="margin-top: 10px;"></ul>
-            <div class="message" id="settings-message"></div>
-        </section>
-    </main>
+                <section class="panel" id="panel-stats" role="tabpanel" aria-labelledby="tab-stats" hidden>
+                    <h1 class="panel-title">Your pattern</h1>
+                    <p class="lede" id="stats-lede"></p>
+                    <div class="heat" id="heat" role="img"></div>
+                    <div class="heat-legend muted small" id="heat-legend"></div>
+                    <div class="split">
+                        <div>
+                            <h2>Top temptations · 30 days</h2>
+                            <ol class="bars" id="top-sites"></ol>
+                        </div>
+                        <div class="side">
+                            <h2>This week</h2>
+                            <ul class="sentences" id="stats-week"></ul>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+                    <h1 class="panel-title">Settings</h1>
+                    <p class="lede">Making super bans easier only takes effect after the current cool-off. Making them stricter applies right away.</p>
+                    <ul class="settings" id="settings"></ul>
+                    <p class="message" id="settings-message" aria-live="polite"></p>
+                    <button class="link-btn" id="replay-tour">Replay the intro</button>
+                </section>
+            </div>
+        </div>
+        <aside class="corner" aria-live="polite">
+            <p class="bubble side" id="corner-line"></p>
+            <div id="corner-mascot"></div>
+        </aside>
+    </div>
     <script type="module" src="dashboard.js"></script>
 </body>
 </html>

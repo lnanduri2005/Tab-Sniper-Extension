@@ -1,0 +1,53 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "popup.html"
+        ],
+        "createdAt": "2026-11-09T01:30:27.618Z",
+        "reason": "Claude: browser-style tabs sit flush on the mascot window's title bar by design (title-bar tabs layout chosen by the user)"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "dashboard.html"
+        ],
+        "createdAt": "2026-11-09T01:30:27.847Z",
+        "reason": "Claude: browser-style tabs sit flush on the mascot window's title bar by design (title-bar tabs layout chosen by the user)"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "onboarding.html"
+        ],
+        "createdAt": "2026-11-09T01:30:28.084Z",
+        "reason": "Claude: browser-style tabs sit flush on the mascot window's title bar by design (title-bar tabs layout chosen by the user)"
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "createdAt": "2026-11-09T01:30:28.298Z",
+        "reason": "Claude: literal character motion for the mascot's reactions (squash/bounce), domain-appropriate"
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "animation: bounce",
+        "createdAt": "2026-11-09T01:30:28.516Z",
+        "reason": "Claude: literal character motion for the mascot's reactions (squash/bounce), domain-appropriate"
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "animation: var(--ease-spring)",
+        "createdAt": "2026-11-09T01:30:28.742Z",
+        "reason": "Claude: literal character motion for the mascot's reactions (squash/bounce), domain-appropriate"
+      }
+    ]
+  }
+}

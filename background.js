@@ -17,6 +17,7 @@ import { PROFILES, newWatchedEntry, clampWatchField, findWatched } from "./lib/p
 import { accrue, recordNav, evaluate, measure, emptyEntry, VISIT_GAP_MS } from "./lib/detector.js";
 import { startCooldown, inCooldown, nextCooldownMinutes, pruneCooldowns } from "./lib/cooldown.js";
 import { showToast } from "./lib/toast.js";
+import { logEvent, pruneLog, summarize, trend } from "./lib/stats.js";
 
 const BLOCK_PAGE = chrome.runtime.getURL("blocked.html");
 const CONTEXT_MENU_ID = "tab-sniper-block-domain";
@@ -29,7 +30,7 @@ const IDLE_SEC = 120;
 const SYNC_KEYS = ["enabled", "bans", "superBans", "watched", "settings", "pendingSettings", "removals", "challengeLocks", "presets"];
 const LOCAL_KEYS = [
     "timer", "history", "stats", "lastResetWeek", "pauses", "pauseRequests", "pauseUsage", "attempts", "dueNotified",
-    "watch", "activeFocus", "cooldowns", "trips"
+    "watch", "activeFocus", "cooldowns", "trips", "statsLog"
 ];
 const RULE_KEYS = new Set(["enabled", "bans", "superBans", "watched", "settings", "timer", "pauses", "cooldowns"]);
 
@@ -59,7 +60,8 @@ async function loadState() {
         watch: l.watch || {},
         activeFocus: l.activeFocus || null,
         cooldowns: l.cooldowns || {},
-        trips: l.trips || {}
+        trips: l.trips || {},
+        statsLog: l.statsLog || {}
     };
 }
 
@@ -135,6 +137,20 @@ function updateIcon(state, now) {
     chrome.action.setIcon({ path: on ? "icon_mischiveous.png" : "icon_sleep.png" });
 }
 
+// ---------- 30-day stats log ----------
+// Serialized so concurrent events never drop a count.
+
+let statsChain = Promise.resolve();
+function bumpStat(field, key, amount = 1) {
+    statsChain = statsChain
+        .then(async () => {
+            const { statsLog } = await chrome.storage.local.get("statsLog");
+            await chrome.storage.local.set({ statsLog: logEvent(statsLog, dayKey(), field, key, amount) });
+        })
+        .catch((e) => console.error("stats", e));
+    return statsChain;
+}
+
 // ---------- watched sites ----------
 // Every step credits the time since the last step to whatever Watched site was focused
 // (and the user wasn't idle), counts swipes from URL changes, then warns or trips.
@@ -192,6 +208,7 @@ async function watchStep(nav = null) {
         if (result.trip) {
             ({ cooldowns, trips } = startCooldown(cooldowns, trips, w.domain, result.trip.text, now, dayKey()));
             watch[w.domain] = emptyEntry();
+            bumpStat("trips", w.domain);
             chrome.alarms.create(`${ALARM_COOLDOWN_PREFIX}${w.domain}`, { when: cooldowns[w.domain].until });
         } else if (result.warn) {
             toasts.push({ tabId, text: `${result.warn.text}. I cut you off at the limit.` });
@@ -219,26 +236,6 @@ chrome.idle.onStateChanged.addListener(kickWatch);
 chrome.idle.setDetectionInterval(IDLE_SEC);
 
 // ---------- focus timer ----------
-
-function getCurrentWeekKey(date = new Date()) {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const dayNum = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    const weekNo = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-    return `${d.getUTCFullYear()}-${weekNo}`;
-}
-
-async function maybeResetWeekly(state) {
-    const week = getCurrentWeekKey();
-    if (state.lastResetWeek === week) return;
-    const update = { lastResetWeek: week };
-    if (state.lastResetWeek) {
-        update.history = [];
-        update.stats = ensureStatsShape({});
-    }
-    await chrome.storage.local.set(update);
-}
 
 async function startTimer(minutes, source) {
     const state = await loadState();
@@ -281,6 +278,7 @@ async function endSession({ completed, reason }) {
     await chrome.storage.local.set({ timer: null, history, stats });
     chrome.alarms.clear(ALARM_SESSION_END);
     if (completed) {
+        bumpStat("focusMin", null, timer.durationMinutes);
         notify("Focus session complete!", `You finished your ${timer.durationMinutes} minute session.`);
     }
     return true;
@@ -318,7 +316,10 @@ async function tick() {
     }
     if (notifiedChanged) await chrome.storage.local.set({ dueNotified });
 
-    await maybeResetWeekly(state);
+    const { statsLog } = await chrome.storage.local.get("statsLog");
+    const prunedLog = pruneLog(statsLog);
+    if (Object.keys(prunedLog).length !== Object.keys(statsLog || {}).length) await chrome.storage.local.set({ statsLog: prunedLog });
+
     await queueWatch(() => watchStep());
 }
 
@@ -367,7 +368,6 @@ const handlers = {
             settings: state.settings,
             pendingSettings: state.pendingSettings,
             history: state.history,
-            stats: state.stats,
             superBans: state.superBans.map(({ domain, addedAt }) => ({
                 domain,
                 addedAt,
@@ -384,7 +384,11 @@ const handlers = {
                 usage: measure(liveEntry(state.watch[w.domain], now), w, now),
                 tripsToday: readDaily(state.trips, day, w.domain)
             })),
-            profiles: Object.entries(PROFILES).map(([key, p]) => ({ key, label: p.label, domain: p.domain }))
+            profiles: Object.entries(PROFILES).map(([key, p]) => ({ key, label: p.label, domain: p.domain })),
+            stats: (() => {
+                const summary = summarize(state.statsLog);
+                return { ...summary, trend: trend(summary) };
+            })()
         };
     },
 
@@ -577,6 +581,7 @@ const handlers = {
         const state = await loadState();
         const attempts = bumpDaily(state.attempts, dayKey(), domain);
         await chrome.storage.local.set({ attempts });
+        bumpStat("attempts", domain);
         return { ok: true, attemptsToday: attempts.byKey[domain] };
     },
 
@@ -610,6 +615,7 @@ const handlers = {
         const left = pauseMinutesLeft(state.pauseUsage, domain, day, state.settings.pauseCapMin);
         if (request.minutes > left) return { ok: false, error: "Daily pause limit reached" };
         const { pauses, usage } = grantPause(state.pauses, state.pauseUsage, domain, request.minutes, now, day);
+        bumpStat("pauses", domain, request.minutes);
         const pauseRequests = { ...state.pauseRequests };
         delete pauseRequests[domain];
         await chrome.storage.local.set({ pauses, pauseUsage: usage, pauseRequests });
@@ -661,7 +667,10 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 // ---------- startup ----------
 
-chrome.runtime.onInstalled.addListener(createContextMenu);
+chrome.runtime.onInstalled.addListener((details) => {
+    createContextMenu();
+    if (details.reason === "install") chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
+});
 
 async function init() {
     await runMigration();
