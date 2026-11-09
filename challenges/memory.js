@@ -38,7 +38,9 @@ export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.r
     let accepting = false;
 
     const progress = el("div", { class: "challenge-progress" });
-    const status = el("div", { class: "challenge-status" });
+    const status = el("div", { class: "challenge-status", role: "status", "aria-live": "polite" });
+    // Announces each shape as it lights up, so the sequence isn't sight-only.
+    const announcer = el("div", { class: "sr-only", "aria-live": "assertive" });
     const pads = Array.from({ length: PADS }, (_, i) =>
         el("button", { class: `memory-pad pad-${i}`, type: "button", "aria-label": `${NAMES[i]} pad`, onclick: () => press(i) })
     );
@@ -60,10 +62,12 @@ export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.r
         status.textContent = "Watch...";
         await wait(700);
         for (const i of sequence) {
+            announcer.textContent = NAMES[i];
             await light(i, 450);
             await wait(180);
         }
         status.textContent = "Your turn.";
+        announcer.textContent = "";
         accepting = true;
     }
 
@@ -95,7 +99,8 @@ export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.r
         el("p", { class: "challenge-help", text: `Repeat the sequence. It grows each round until length ${target}. One mistake starts over.` }),
         progress,
         board,
-        status
+        status,
+        announcer
     );
     playRound();
 }

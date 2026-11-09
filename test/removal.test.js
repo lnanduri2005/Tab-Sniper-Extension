@@ -21,3 +21,13 @@ test("challenge lock survives re-requests (no rerolls)", () => {
     const released = releaseChallenge(again.locks, "removal:x.com");
     assert.deepEqual(released, {});
 });
+
+import { swapChallenge } from "../challenges/index.js";
+
+test("cannon can be swapped to typing exactly once", () => {
+    const first = swapChallenge({ "removal:x.com": "cannon" }, "removal:x.com");
+    assert.equal(first.type, "typing");
+    assert.equal(swapChallenge(first.locks, "removal:x.com"), null, "typing can't be swapped again");
+    assert.equal(swapChallenge({ settings: "math" }, "settings"), null, "only the cannon is swappable");
+    assert.equal(swapChallenge({}, "settings"), null);
+});

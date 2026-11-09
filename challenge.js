@@ -75,8 +75,27 @@ async function init() {
     }
     roamer.goTo("top-right", { instant: true, say: say("challenge.start") });
 
-    const module = await import(`./challenges/${res.type}.js`);
-    module.mount($("challenge-root"), { mini: res.mini, onComplete, onEvent });
+    await mountChallenge(res.type, res.mini);
+}
+
+async function mountChallenge(type, mini) {
+    $("task-label").textContent = CHALLENGE_LABELS[type];
+    const module = await import(`./challenges/${type}.js`);
+    module.mount($("challenge-root"), { mini, onComplete, onEvent });
+    if (type === "cannon") {
+        // Some people can't aim precisely. One swap to typing, never back, never again.
+        const swap = el("button", {
+            class: "text-btn",
+            text: "Can't aim? Switch to typing instead (one time only)",
+            onclick: async () => {
+                const r = await send("swapChallenge", { purpose, domain });
+                if (!r.ok) return;
+                roamer.say("Fine. Typing it is. No more swaps.");
+                await mountChallenge(r.type, mini);
+            }
+        });
+        $("challenge-root").append(el("div", { class: "swap-row" }, [swap]));
+    }
 }
 
 async function onComplete() {
@@ -97,5 +116,7 @@ async function onComplete() {
         showResult("Session ended. Your bans are back to normal.");
     }
 }
+
+$("back").addEventListener("click", () => chrome.runtime.openOptionsPage());
 
 init();

@@ -29,9 +29,9 @@ export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.r
     let problem = makeProblem(rng);
 
     const progress = el("div", { class: "challenge-progress" });
-    const question = el("div", { class: "math-question" });
-    const input = el("input", { class: "math-input", type: "text", inputmode: "numeric", autocomplete: "off" });
-    const status = el("div", { class: "challenge-status" });
+    const question = el("div", { class: "math-question", "aria-live": "polite" });
+    const input = el("input", { class: "math-input", type: "text", inputmode: "numeric", autocomplete: "off", "aria-label": "Your answer" });
+    const status = el("div", { class: "challenge-status", role: "status", "aria-live": "polite" });
     const form = el("form", { class: "math-form" }, [input, el("button", { type: "submit", class: "btn", text: "Submit" })]);
 
     function render() {

@@ -12,7 +12,7 @@ import {
 import { newRemoval, completeRemovalChallenge, removalStatus } from "./lib/removal.js";
 import { migrate, ensureStatsShape, SCHEMA_VERSION } from "./lib/migrate.js";
 import { dayKey, bumpDaily, readDaily } from "./lib/day.js";
-import { lockChallenge, releaseChallenge } from "./challenges/index.js";
+import { lockChallenge, releaseChallenge, swapChallenge } from "./challenges/index.js";
 import { PROFILES, newWatchedEntry, clampWatchField, findWatched } from "./lib/profiles.js";
 import { accrue, recordNav, evaluate, measure, emptyEntry, VISIT_GAP_MS } from "./lib/detector.js";
 import { startCooldown, inCooldown, nextCooldownMinutes, pruneCooldowns } from "./lib/cooldown.js";
@@ -561,6 +561,14 @@ const handlers = {
         const { locks, type } = lockChallenge(state.challengeLocks, key);
         if (locks !== state.challengeLocks) await chrome.storage.local.set({ challengeLocks: locks });
         return { ok: true, type, mini: purpose === "endEarly" || purpose === "settings" };
+    },
+
+    async swapChallenge({ purpose, domain }) {
+        const state = await loadState();
+        const r = swapChallenge(state.challengeLocks, lockKey(purpose, domain));
+        if (!r) return { ok: false, error: "This challenge can't be swapped." };
+        await chrome.storage.local.set({ challengeLocks: r.locks });
+        return { ok: true, type: r.type };
     },
 
     async challengeComplete({ purpose, domain }) {

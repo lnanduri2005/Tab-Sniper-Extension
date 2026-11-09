@@ -81,7 +81,7 @@
     --danger-text: var(--m-ink);
     --focus: var(--m-blush);
     --selection: rgba(238, 147, 171, 0.45);
-    --note: var(--m-blush);
+    --note: #f6bccb; /* lighter blush: AA on every dark surface (4.8-7.2:1) */
     color-scheme: dark;
 }
 

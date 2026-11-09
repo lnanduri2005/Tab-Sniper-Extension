@@ -106,6 +106,7 @@ function renderWake() {
     if (state.timer) btn.innerHTML = `${ICONS.lock}<span>Locked during focus</span>`;
     else if (state.bansActive) btn.innerHTML = `${ICONS.moon}<span>Nap time</span>`;
     else btn.innerHTML = `${ICONS.sun}<span>Wake up</span>`;
+    btn.setAttribute("aria-label", state.timer ? "Bans locked on during your focus session" : state.bansActive ? "Nap time: turn bans off (Tab Sniper is awake)" : "Wake up: turn bans on (Tab Sniper is asleep)");
 }
 
 function renderHere() {

@@ -87,9 +87,10 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
         bubble.style.transform = `translate(${x}px, ${y}px)`;
     }
 
-    function say(text, ms = 5000) {
+    function say(text, ms = 5000, { announce = true } = {}) {
         if (!text) return;
         clearTimeout(bubbleTimer);
+        bubble.setAttribute("aria-live", announce ? "polite" : "off");
         bubble.textContent = text;
         bubble.hidden = false;
         bubble.classList.remove("show");
@@ -160,7 +161,7 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
         if (bubbleWasOpen && !bubble.hidden) bubble.classList.add("show");
     }
 
-    function goTo(id, { mood: m, say: text, instant = false } = {}) {
+    function goTo(id, { mood: m, say: text, instant = false, announce = true } = {}) {
         let perch = perches.find((p) => p.id === id);
         let target = perch && positionFor(perch);
         if (!target) {
@@ -173,7 +174,7 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
         currentId = perch.id;
         const land = () => {
             if (m) mascot.express(m, 2400);
-            if (text) say(text);
+            if (text) say(text, 5000, { announce });
         };
         if (instant) {
             place(target);
@@ -297,7 +298,7 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
         const peeks = list.filter((x) => x.perch.mode === "peek");
         const pool = peeks.length && Math.random() < 0.6 ? peeks : list;
         const pick = pool[Math.floor(Math.random() * pool.length)];
-        goTo(pick.perch.id, Math.random() < 0.3 ? { say: line("roam.idle") } : {});
+        goTo(pick.perch.id, Math.random() < 0.3 ? { say: line("roam.idle"), announce: false } : {});
     }
 
     const onInput = () => scheduleWander();

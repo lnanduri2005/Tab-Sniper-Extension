@@ -138,6 +138,12 @@ function go(i) {
     $("step-label").textContent = `${step + 1} of ${STEPS.length} · ${STEPS[step]}`;
     $("steps").replaceChildren(...STEPS.map((_, j) => el("span", { class: `dot ${j < step ? "done" : j === step ? "now" : ""}` })));
     $("screen").replaceChildren(RENDER[step]());
+    // Move focus to the new step's heading so keyboard and screen-reader users land on it.
+    const heading = $("screen").querySelector("h1, .bubble");
+    if (heading) {
+        heading.setAttribute("tabindex", "-1");
+        heading.focus({ preventScroll: true });
+    }
     $("skip").hidden = step === STEPS.length - 1;
 
     if (step === 0 || step === STEPS.length - 1) {

@@ -390,6 +390,7 @@ function renderFocus() {
             { minutes: 50, label: "50 min" },
             ...state.presets.map((p) => ({ minutes: p.minutes, label: `${p.name} · ${p.minutes}`, preset: p }))
         ];
+        // Each preset chip is a radio plus a separate, keyboard-reachable delete button.
         const chips = el("div", { class: "chips", role: "radiogroup", "aria-label": "Focus length" }, options.map((o) => {
             const chip = el("button", {
                 class: "chip",
@@ -400,19 +401,17 @@ function renderFocus() {
                     renderFocus();
                 }
             }, [o.label]);
-            if (o.preset) {
-                chip.append(el("span", {
-                    class: "del",
-                    role: "button",
-                    "aria-label": `Delete preset ${o.preset.name}`,
-                    html: ICONS.x,
-                    onclick: async (e) => {
-                        e.stopPropagation();
-                        await send("savePresets", { presets: state.presets.filter((p) => p.id !== o.preset.id) });
-                    }
-                }));
-            }
-            return chip;
+            if (!o.preset) return chip;
+            const del = el("button", {
+                class: "chip-del",
+                "aria-label": `Delete preset ${o.preset.name}`,
+                title: `Delete preset ${o.preset.name}`,
+                html: ICONS.x,
+                onclick: async () => {
+                    await send("savePresets", { presets: state.presets.filter((p) => p.id !== o.preset.id) });
+                }
+            });
+            return el("span", { class: "chip-wrap" }, [chip, del]);
         }));
         const custom = el("input", { class: "field", type: "number", min: "1", max: "240", value: String(selectedMinutes), "aria-label": "Custom minutes" });
         custom.addEventListener("change", () => {
@@ -488,12 +487,13 @@ function renderStats() {
         ? `${tries(s.total30)} at blocked sites in the last 30 days.`
         : "No attempts in the last 30 days. Your pattern shows up here as you go.";
     const max = Math.max(...s.series.map((d) => d.attempts), 1);
+    $("heat").setAttribute("role", "list");
     $("heat").setAttribute("aria-label", `Attempts per day for the last 30 days, busiest day ${max}.`);
     $("heat").replaceChildren(
         ...s.series.map((d, i) => {
             const date = new Date(`${d.day}T12:00:00`);
             const label = `${date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}: ${tries(d.attempts)}${d.trips ? `, ${d.trips} cutoffs` : ""}`;
-            return el("div", { class: `cell ${i === s.series.length - 1 ? "today" : ""}`, "data-level": String(level(d.attempts, max)), title: label });
+            return el("div", { class: `cell ${i === s.series.length - 1 ? "today" : ""}`, "data-level": String(level(d.attempts, max)), title: label, role: "listitem", "aria-label": label });
         })
     );
     $("heat-legend").replaceChildren(

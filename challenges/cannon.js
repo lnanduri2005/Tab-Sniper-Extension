@@ -100,10 +100,23 @@ export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.r
     let done = false;
     let last = performance.now();
 
-    const canvas = el("canvas", { class: "cannon-canvas", width: String(WORLD.width), height: String(WORLD.height), tabindex: "0" });
+    const canvas = el("canvas", {
+        class: "cannon-canvas",
+        width: String(WORLD.width),
+        height: String(WORLD.height),
+        tabindex: "0",
+        role: "img",
+        "aria-label": "Cannon game. Arrow keys aim, Space fires."
+    });
+    // Spoken state for keyboard and screen-reader players: aim angle and where the basket is.
+    const aimText = el("div", { class: "sr-only", "aria-live": "polite" });
+    const announceAim = () => {
+        const where = basket.value < BASKET.minX + (BASKET.maxX - BASKET.minX) / 3 ? "near" : basket.value > BASKET.maxX - (BASKET.maxX - BASKET.minX) / 3 ? "far" : "middle";
+        aimText.textContent = `Aim ${Math.round(angle)} degrees. Basket is ${where}.`;
+    };
     const ctx = canvas.getContext("2d");
     const progress = el("div", { class: "challenge-progress" });
-    const status = el("div", { class: "challenge-status" });
+    const status = el("div", { class: "challenge-status", role: "status", "aria-live": "polite" });
 
     function render() {
         progress.textContent = `Streak ${streak} / ${needed} · best ${best} · shots ${shots}`;
@@ -249,9 +262,11 @@ export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.r
         } else if (e.code === "ArrowUp" || e.code === "ArrowLeft") {
             e.preventDefault();
             if (!ball) angle = clampAngle(angle + step);
+            announceAim();
         } else if (e.code === "ArrowDown" || e.code === "ArrowRight") {
             e.preventDefault();
             if (!ball) angle = clampAngle(angle - step);
+            announceAim();
         }
     });
 
@@ -259,7 +274,8 @@ export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.r
         el("p", { class: "challenge-help", text: `Aim with your mouse (or the arrow keys), then click or press Space to fire. The guide fades out, so lead the moving basket. Land ${needed} in a row.` }),
         progress,
         canvas,
-        status
+        status,
+        aimText
     );
     render();
     canvas.focus();

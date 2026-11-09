@@ -125,7 +125,7 @@ const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matche
 export function createMascot({ mood = "idle", variant = "full", label = "Tab Sniper mascot", interactive = true, idle = null, onTap = null } = {}) {
     const el = document.createElement("div");
     el.className = `mascot mascot-${variant}`;
-    el.setAttribute("role", "img");
+    el.setAttribute("role", interactive ? "button" : "img");
     el.setAttribute("aria-label", label);
     el.innerHTML = svgMarkup(variant);
     const svg = el.querySelector("svg");

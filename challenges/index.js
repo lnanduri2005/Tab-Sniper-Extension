@@ -27,3 +27,15 @@ export function releaseChallenge(locks, key) {
     delete next[key];
     return next;
 }
+
+// One-time escape from the cannon for people who can't aim precisely: it swaps to typing,
+// which is no easier, and only the cannon can be swapped, so it can't be used to reroll.
+export const SWAPPABLE = { cannon: "typing" };
+
+// -> { locks, type } or null when this lock can't be swapped
+export function swapChallenge(locks, key) {
+    const current = locks?.[key];
+    const next = SWAPPABLE[current];
+    if (!next) return null;
+    return { locks: { ...locks, [key]: next }, type: next };
+}

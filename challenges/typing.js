@@ -46,15 +46,18 @@ export function mount(root, { mini, onComplete, onEvent = () => {}, rng = Math.r
     let typos = 0;
 
     const progress = el("div", { class: "challenge-progress" });
-    const target = el("div", { class: "typing-target" });
+    const targetId = `typing-target-${Date.now()}`;
+    const target = el("div", { class: "typing-target", id: targetId });
     const input = el("textarea", {
         class: "typing-input",
         rows: "3",
         spellcheck: "false",
         autocomplete: "off",
-        placeholder: "Start typing the sentence above..."
+        placeholder: "Start typing the sentence above...",
+        "aria-label": "Type the sentence shown above, exactly",
+        "aria-describedby": targetId
     });
-    const status = el("div", { class: "challenge-status" });
+    const status = el("div", { class: "challenge-status", role: "status", "aria-live": "polite" });
 
     for (const evt of ["paste", "drop", "contextmenu"]) {
         input.addEventListener(evt, (e) => {
