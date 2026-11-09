@@ -1,6 +1,7 @@
 import { send, formatDuration, formatClock } from "./lib/api.js";
 import { SETTING_LIMITS } from "./lib/defaults.js";
-import { createMascot } from "./ui/mascot.js";
+import { createRoamer } from "./ui/roam.js";
+import { createTapper } from "./ui/status.js";
 import { say } from "./ui/voice.js";
 import { ICONS } from "./ui/icons.js";
 import { loadSoundSetting, setSoundEnabled, play } from "./ui/sound.js";
@@ -14,14 +15,37 @@ let pendingSuper = null;
 let focusTick = null;
 let watchChoice = null;
 
-const mascot = createMascot({ mood: "idle", label: "Tab Sniper mascot", idle: { boredMs: 40000, sleepMs: 120000 } });
-$("corner-mascot").append(mascot.el);
-mascot.on((evt) => evt === "poke" && play("poke"));
+const roamer = createRoamer({ mood: "idle", size: 96, play, onTap: () => onTap() });
+const mascot = roamer.mascot;
+const onTap = createTapper({ mascot, getState: () => state, speak: (t) => roamer.say(t), play });
+
+// Perches: one "home" spot per tab where it sits on top of something, plus peeks
+// behind the window's edges for idle wandering. Action perches sit on each Sites column.
+const PERCHES = [
+    { id: "window-top", target: ".dash", mode: "sit", align: 0.88 },
+    { id: "peek-top-left", target: ".dash", mode: "peek", side: "top", align: 0.16 },
+    { id: "peek-top-mid", target: ".dash", mode: "peek", side: "top", align: 0.55 },
+    { id: "peek-right", target: ".dash", mode: "peek", side: "right", align: 0.35 },
+    { id: "peek-right-low", target: ".dash", mode: "peek", side: "right", align: 0.8 },
+    { id: "overview", target: "#panel-overview .side h2", mode: "sit", align: 0.85, noWander: true },
+    { id: "col-ban", target: "#head-ban", mode: "sit", align: 0.85, noWander: true },
+    { id: "col-watched", target: "#head-watched", mode: "sit", align: 0.85, noWander: true },
+    { id: "col-super", target: "#head-super", mode: "sit", align: 0.85, noWander: true },
+    { id: "focus", target: "#panel-focus .side h2", mode: "sit", align: 0.85, noWander: true },
+    { id: "stats", target: "#heat", mode: "sit", align: 0.96, noWander: true },
+    { id: "settings", target: "#settings", mode: "sit", align: 0.94, noWander: true }
+];
+const TAB_HOME = { overview: "overview", sites: "col-super", focus: "focus", stats: "stats", settings: "settings" };
 
 const tries = (n) => `${n} ${n === 1 ? "try" : "tries"}`;
 
-function corner(text, mood, ms = 2400) {
-    $("corner-line").textContent = text;
+// Speak (and optionally hop somewhere first).
+function corner(text, mood, ms = 2400, perch = null) {
+    if (perch) {
+        roamer.goTo(perch, { mood, say: text });
+        return;
+    }
+    if (text) roamer.say(text);
     if (mood) mascot.express(mood, ms);
 }
 
@@ -38,6 +62,7 @@ async function refresh() {
     if (!res.ok) return;
     state = res;
     mascot.setMood(state.timer ? "idle" : state.bansActive ? "mischievous" : "sleep");
+    roamer.setStill(!!state.settings.mascotStill);
     renderOverview();
     renderStats();
     // Don't redraw a region while someone is editing a field inside it (Watched limits,
@@ -131,7 +156,7 @@ function superRow(b) {
         actions.push(btn("Request removal", "ghost", async () => {
             const r = await send("requestRemoval", { domain: b.domain });
             if (r.ok) {
-                corner("Oh? Let's see you earn it.", "smug");
+                corner("Oh? Let's see you earn it.", "smug", 2400, "col-super");
                 chrome.tabs.create({ url: r.url });
             } else say$("super-message", r.error, true);
         }));
@@ -259,8 +284,7 @@ $("watch-form").addEventListener("submit", async (e) => {
     if (!r.ok) return say$("watch-message", r.error, true);
     $("watch-input").value = "";
     say$("watch-message", `Watching ${r.domain}.`);
-    corner(`I'll keep an eye on ${r.domain}.`, "mischievous");
-    mascot.react("bounce");
+    corner(`I'll keep an eye on ${r.domain}.`, "mischievous", 2400, "col-watched");
     play("happy");
 });
 
@@ -270,8 +294,7 @@ $("ban-form").addEventListener("submit", async (e) => {
     if (!r.ok) return say$("ban-message", r.error, true);
     $("ban-input").value = "";
     say$("ban-message", "");
-    corner(`${r.domain}. Noted.`, "smug");
-    mascot.react("bounce");
+    corner(`${r.domain}. Noted.`, "smug", 2400, "col-ban");
     play("happy");
 });
 
@@ -283,7 +306,7 @@ $("super-form").addEventListener("submit", async (e) => {
         pendingSuper = input;
         $("super-add").textContent = "Confirm";
         say$("super-message", `Blocks it 24/7. Undoing takes a challenge plus a ${state.settings.coolOffHours}h cool-off. Press Confirm to lock it in.`);
-        corner("You sure? This one's serious.", "surprised");
+        corner("You sure? This one's serious.", "surprised", 2400, "col-super");
         return;
     }
     pendingSuper = null;
@@ -292,8 +315,7 @@ $("super-form").addEventListener("submit", async (e) => {
     if (!r.ok) return say$("super-message", r.error, true);
     $("super-input").value = "";
     say$("super-message", `${r.domain} is locked.`);
-    corner(`${r.domain} is in the vault now.`, "stern", 2600);
-    mascot.react("nod");
+    corner(`${r.domain} is in the vault now.`, "stern", 2600, "col-super");
     play("deny");
 });
 $("super-input").addEventListener("input", () => {
@@ -478,7 +500,7 @@ async function saveSetting(key, value) {
     if (!r.ok) return say$("settings-message", r.error, true);
     if (r.status === "pending") {
         say$("settings-message", `Easier setting scheduled for ${formatClock(r.effectiveAt)}.`);
-        corner("Nice try. That kicks in later.", "smug");
+        corner("Nice try. That kicks in later.", "smug", 2400, "settings");
     } else if (r.status === "applied") {
         say$("settings-message", "Saved.");
         mascot.react("nod");
@@ -538,6 +560,20 @@ function renderSettings() {
     });
     rows.push(settingRow({ label: "Mascot sounds", desc: "Tiny blips when I react. Off by default.", control: [soundBtn] }));
 
+    const still = !!state.settings.mascotStill;
+    const stillBtn = el("button", {
+        class: "btn small",
+        "aria-pressed": String(!still),
+        "aria-label": "Mascot wanders around",
+        html: `<span>${still ? "Holds still" : "Wanders"}</span>`,
+        onclick: async () => {
+            await saveSetting("mascotStill", !still);
+            roamer.setStill(!still);
+            corner(still ? "Free to roam!" : "Fine. I'll sit here.", still ? "happy" : "grudging");
+        }
+    });
+    rows.push(settingRow({ label: "Wandering", desc: "Whether I hop around on my own when you're idle. I still move when you switch tabs.", control: [stillBtn] }));
+
     $("settings").replaceChildren(...rows);
 }
 
@@ -558,10 +594,16 @@ function selectTab(name, focus = false) {
     }
     if (location.hash !== `#${name}`) history.replaceState(null, "", `#${name}`);
     if (!state) return;
-    if (name === "overview") corner(say("dash.hello"));
-    else if (name === "stats") corner(statsLine(), state.stats.trend === "up" ? "smug" : state.stats.trend === "down" ? "surprised" : null);
-    else if (name === "settings") corner("Careful. I remember everything.", "smug");
-    else corner("");
+    const lines = {
+        overview: [say("dash.hello"), null],
+        stats: [statsLine(), state.stats.trend === "up" ? "smug" : state.stats.trend === "down" ? "surprised" : null],
+        settings: ["Careful. I remember everything.", "smug"]
+    };
+    const [text, mood] = lines[name] || [null, null];
+    // wait a frame so the newly shown panel has its layout before measuring perches
+    // narrow screens stack the Sites columns, so home on the first one (it's in view)
+    const home = name === "sites" && innerWidth < 960 ? "col-ban" : TAB_HOME[name];
+    requestAnimationFrame(() => roamer.goTo(home, { say: text, mood }));
 }
 
 TABS.forEach((t) => $(`tab-${t}`).addEventListener("click", () => selectTab(t)));
@@ -580,5 +622,6 @@ chrome.storage.onChanged.addListener((changes) => {
 loadSoundSetting();
 await refresh();
 const initial = location.hash.slice(1);
+roamer.setPerches(PERCHES);
 selectTab(TABS.includes(initial) ? initial : "overview");
 setInterval(refresh, 30000);

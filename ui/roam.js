@@ -44,9 +44,16 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
         return { left: r.left + scrollX, top: r.top + scrollY, width: r.width, height: r.height };
     }
 
+    function onScreen(p) {
+        const pageW = document.documentElement.scrollWidth;
+        return p.x > -box.w * 0.6 && p.x + box.w * 0.4 < pageW && p.y > -box.h * 0.4;
+    }
+
     function positionFor(perch) {
         const rect = resolve(perch);
-        return rect ? { ...perchPosition(rect, perch, box), id: perch.id } : null;
+        if (!rect) return null;
+        const p = { ...perchPosition(rect, perch, box), id: perch.id };
+        return onScreen(p) ? p : null;
     }
 
     function available() {
@@ -153,10 +160,15 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
     }
 
     function goTo(id, { mood: m, say: text, instant = false } = {}) {
-        const perch = perches.find((p) => p.id === id) || perches[0];
-        if (!perch) return;
-        const target = positionFor(perch);
-        if (!target) return;
+        let perch = perches.find((p) => p.id === id);
+        let target = perch && positionFor(perch);
+        if (!target) {
+            // requested perch is hidden or off-screen: use the first one that works
+            const fallback = available()[0];
+            if (!fallback) return;
+            perch = fallback.perch;
+            target = fallback.at;
+        }
         currentId = perch.id;
         const land = () => {
             if (m) mascot.express(m, 2400);
