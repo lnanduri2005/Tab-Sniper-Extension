@@ -19,7 +19,7 @@ test("buildRules redirects main frame with super priority", () => {
     );
     assert.equal(rules.length, 2);
     assert.equal(rules[0].id, 1);
-    assert.equal(rules[0].priority, 2);
+    assert.equal(rules[0].priority, 3);
     assert.equal(rules[1].priority, 1);
     assert.deepEqual(rules[0].condition.resourceTypes, ["main_frame"]);
     assert.equal(
