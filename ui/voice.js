@@ -59,7 +59,14 @@ export const LINES = {
     "stats.first": ["First week on the books. I'm watching the trend."],
     "stats.down": ["Down {pct}% from last week. Suspicious.", "{pct}% fewer tries than last week. Who are you?"],
     "stats.up": ["Up {pct}% from last week. We need to talk.", "More tries than last week. I noticed."],
-    "stats.flat": ["About the same as last week. Steady. Too steady."]
+    "stats.flat": ["About the same as last week. Steady. Too steady."],
+    "tap.annoyed": ["Stop poking me.", "I'm WORKING.", "Do that again. I dare you.", "Rude.", "My screen is not a button."],
+    "tap.sleepy": ["Mmh... five more minutes...", "Zzz... what... no...", "I'm napping. Super bans aren't."],
+    "tap.calm": ["All quiet. Keep it that way."],
+    "roam.dropped": ["Hmph.", "I was comfy there.", "Fine. Here, then."],
+    "roam.thrown": ["Rude.", "Wow. Okay.", "I'll remember that.", "Was that necessary?"],
+    "roam.lifted": ["Put me down!", "Hey!", "Whoa whoa whoa."],
+    "roam.idle": ["*yawns*", "Just checking on things.", "Nice place you've got here.", "Still here. Still watching."]
 };
 
 let lastPicked = {};

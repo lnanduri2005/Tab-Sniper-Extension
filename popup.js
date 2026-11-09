@@ -1,6 +1,7 @@
 import { send, formatDuration } from "./lib/api.js";
 import { extractDomain, domainMatches } from "./lib/match.js";
 import { createMascot } from "./ui/mascot.js";
+import { createTapper } from "./ui/status.js";
 import { say } from "./ui/voice.js";
 import { ICONS } from "./ui/icons.js";
 import { loadSoundSetting, play } from "./ui/sound.js";
@@ -14,9 +15,19 @@ let selectedMinutes = 25;
 let lastLineKey = "";
 let pendingSuper = null;
 
-const mascot = createMascot({ variant: "face", mood: "sleep", idle: { boredMs: 25000, sleepMs: 60000 } });
+const mascot = createMascot({ variant: "face", mood: "sleep", idle: { boredMs: 25000, sleepMs: 60000 }, onTap: () => onTap() });
 $("face-slot").append(mascot.el);
-mascot.on((evt) => evt === "poke" && play("poke"));
+let lineTimer = null;
+const onTap = createTapper({
+    mascot,
+    getState: () => state,
+    play,
+    speak: (text) => {
+        $("line").textContent = text;
+        clearTimeout(lineTimer);
+        lineTimer = setTimeout(() => state && renderLine(true), 6000);
+    }
+});
 $("dashboard-btn").innerHTML = ICONS.gear;
 
 // ---------- data ----------

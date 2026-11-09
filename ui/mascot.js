@@ -122,7 +122,7 @@ function svgMarkup(variant) {
 
 const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-export function createMascot({ mood = "idle", variant = "full", label = "Tab Sniper mascot", interactive = true, idle = null } = {}) {
+export function createMascot({ mood = "idle", variant = "full", label = "Tab Sniper mascot", interactive = true, idle = null, onTap = null } = {}) {
     const el = document.createElement("div");
     el.className = `mascot mascot-${variant}`;
     el.setAttribute("role", "img");
@@ -237,11 +237,15 @@ export function createMascot({ mood = "idle", variant = "full", label = "Tab Sni
     if (interactive) {
         el.classList.add("pokeable");
         el.tabIndex = 0;
-        el.addEventListener("click", poke);
+        const tap = () => (onTap ? onTap() : poke());
+        el.addEventListener("click", (e) => {
+            if (el.dataset.dragged) return; // a drag or throw just ended; not a tap
+            tap(e);
+        });
         el.addEventListener("keydown", (e) => {
             if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                poke();
+                tap();
             }
         });
         document.addEventListener("pointermove", onPointerMove);
@@ -255,6 +259,8 @@ export function createMascot({ mood = "idle", variant = "full", label = "Tab Sni
     return {
         el,
         setMood,
+        poke,
+        get baseMood() { return baseMood; },
         express,
         react,
         get mood() { return current; },
