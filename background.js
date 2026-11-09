@@ -1,6 +1,6 @@
 // Tab Sniper service worker. Stateless: every event re-reads storage, so nothing breaks
 // when Chrome puts the worker to sleep.
-import { DEFAULT_SETTINGS, MINUTE_MS } from "./lib/defaults.js";
+import { DEFAULT_SETTINGS, MINUTE_MS, SETTINGS_UNLOCK_MS } from "./lib/defaults.js";
 import { normalizeDomain } from "./lib/match.js";
 import { decide, activeBlocks, bansActive, timerRunning, isPaused } from "./lib/policy.js";
 import { buildRules, blockPageUrl } from "./lib/rules.js";
@@ -32,7 +32,7 @@ const CUTOFF_MS = 1600; // the mascot's on-page cutoff moment before the block p
 const SYNC_KEYS = ["enabled", "bans", "superBans", "watched", "settings", "pendingSettings", "removals", "challengeLocks", "presets"];
 const LOCAL_KEYS = [
     "timer", "history", "stats", "lastResetWeek", "pauses", "pauseRequests", "pauseUsage", "attempts", "dueNotified",
-    "watch", "activeFocus", "cooldowns", "trips", "statsLog"
+    "watch", "activeFocus", "cooldowns", "trips", "statsLog", "settingsUnlockedUntil"
 ];
 const RULE_KEYS = new Set(["enabled", "bans", "superBans", "watched", "settings", "timer", "pauses", "cooldowns"]);
 
@@ -63,7 +63,8 @@ async function loadState() {
         activeFocus: l.activeFocus || null,
         cooldowns: l.cooldowns || {},
         trips: l.trips || {},
-        statsLog: l.statsLog || {}
+        statsLog: l.statsLog || {},
+        settingsUnlockedUntil: l.settingsUnlockedUntil || 0
     };
 }
 
@@ -214,7 +215,7 @@ async function watchStep(nav = null) {
         const result = evaluate(watch[w.domain], w, now);
         watch[w.domain] = result.entry;
         if (result.trip) {
-            ({ cooldowns, trips } = startCooldown(cooldowns, trips, w.domain, result.trip.text, now, dayKey()));
+            ({ cooldowns, trips } = startCooldown(cooldowns, trips, w.domain, result.trip.text, now, dayKey(), state.settings.watchCooldownMin));
             watch[w.domain] = emptyEntry();
             bumpStat("trips", w.domain);
             chrome.alarms.create(`${ALARM_COOLDOWN_PREFIX}${w.domain}`, { when: cooldowns[w.domain].until });
@@ -371,7 +372,8 @@ function superDomainOf(state, domain) {
 }
 
 function lockKey(purpose, domain) {
-    return purpose === "removal" ? `removal:${domain}` : "endEarly";
+    if (purpose === "removal") return `removal:${domain}`;
+    return purpose === "settings" ? "settings" : "endEarly";
 }
 
 const handlers = {
@@ -390,6 +392,7 @@ const handlers = {
             presets: state.presets,
             settings: state.settings,
             pendingSettings: state.pendingSettings,
+            settingsUnlockedUntil: state.settingsUnlockedUntil > now ? state.settingsUnlockedUntil : 0,
             history: state.history,
             superBans: state.superBans.map(({ domain, addedAt }) => ({
                 domain,
@@ -527,13 +530,13 @@ const handlers = {
             if (status !== "challenge") return { ok: false, error: status === "none" ? "No removal requested" : "Challenge already done" };
         } else if (purpose === "endEarly") {
             if (!timerRunning(state.timer, now)) return { ok: false, error: "No focus session running" };
-        } else {
+        } else if (purpose !== "settings") {
             return { ok: false, error: "Unknown challenge" };
         }
         const key = lockKey(purpose, domain);
         const { locks, type } = lockChallenge(state.challengeLocks, key);
         if (locks !== state.challengeLocks) await chrome.storage.sync.set({ challengeLocks: locks });
-        return { ok: true, type, mini: purpose === "endEarly" };
+        return { ok: true, type, mini: purpose === "endEarly" || purpose === "settings" };
     },
 
     async challengeComplete({ purpose, domain }) {
@@ -552,6 +555,12 @@ const handlers = {
             await endSession({ completed: false, reason: "ended-early" });
             return { ok: true };
         }
+        if (purpose === "settings") {
+            const until = now + SETTINGS_UNLOCK_MS;
+            await chrome.storage.sync.set({ challengeLocks });
+            await chrome.storage.local.set({ settingsUnlockedUntil: until });
+            return { ok: true, until };
+        }
         return { ok: false, error: "Unknown challenge" };
     },
 
@@ -567,10 +576,12 @@ const handlers = {
 
     async updateSetting({ key, value }) {
         const state = await loadState();
-        const r = requestSettingChange(state.settings, state.pendingSettings, key, value, Date.now());
+        const now = Date.now();
+        const r = requestSettingChange(state.settings, state.pendingSettings, key, value, now, { unlocked: state.settingsUnlockedUntil > now });
         if (r.status === "invalid") return { ok: false, error: "Invalid setting" };
+        if (r.status === "locked") return { ok: false, status: "locked", error: "Settings are locked. Beat the quick challenge first." };
         await chrome.storage.sync.set({ settings: r.settings, pendingSettings: r.pending });
-        return { ok: true, status: r.status, effectiveAt: r.effectiveAt };
+        return { ok: true, status: r.status };
     },
 
     async cancelPendingSetting({ key }) {
@@ -595,7 +606,7 @@ const handlers = {
             stillBlocked,
             cooldown: state.cooldowns[domain] || null,
             tripsToday: readDaily(state.trips, day, domain),
-            nextCooldownMin: nextCooldownMinutes(state.trips, domain, day),
+            nextCooldownMin: nextCooldownMinutes(state.trips, domain, day, state.settings.watchCooldownMin),
             attemptsToday: readDaily(state.attempts, day, domain),
             pauseMinutesLeft: minutesLeft,
             pauseOptions: allowedPauseOptions(minutesLeft),

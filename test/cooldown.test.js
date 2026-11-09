@@ -7,7 +7,15 @@ import { DEFAULT_SETTINGS } from "../lib/defaults.js";
 const DAY = "2026-11-08";
 
 test("cooldown doubles per trip, capped at 4h", () => {
-    assert.deepEqual([1, 2, 3, 4, 5, 6].map(cooldownMinutes), [30, 60, 120, 240, 240, 240]);
+    assert.deepEqual([1, 2, 3, 4, 5, 6].map((n) => cooldownMinutes(n)), [30, 60, 120, 240, 240, 240]);
+});
+
+test("cooldown base is adjustable", () => {
+    assert.deepEqual([1, 2, 3].map((n) => cooldownMinutes(n, 10)), [10, 20, 40]);
+    assert.deepEqual([1, 2, 3].map((n) => cooldownMinutes(n, 120)), [120, 240, 240]);
+    const r = startCooldown({}, {}, "x.com", "r", 0, "2026-11-08", 10);
+    assert.equal(r.minutes, 10);
+    assert.equal(nextCooldownMinutes(r.trips, "x.com", "2026-11-08", 10), 20);
 });
 
 test("startCooldown escalates within a day and resets next day", () => {

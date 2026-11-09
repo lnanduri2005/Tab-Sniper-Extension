@@ -27,7 +27,7 @@ Friction, not prison. Three tiers with different undo costs:
 - **Watched**: allowed, but cut off when doomscrolling is detected (per-visit time, short-form streak, swipe count), followed by escalating, unpausable cooldowns.
 - **Super ban**: blocked 24/7. Pausing costs a 3-minute wait on a page you can't leave (daily cap). Removal costs a random challenge (typing, cannon game, mental math, memory) plus a 12h cool-off and a final confirm.
 
-Settings that weaken super bans only take effect after the cool-off.
+Making protection settings easier (pause wait, pause allowance, removal cool-off, Watched cooldown) needs a quick mini challenge, which unlocks Settings for 15 minutes. Making them stricter never does. The Watched cutoff cooldown is adjustable (default 30 min, doubling per cutoff each day, up to 4h).
 
 ## Operating Context
 

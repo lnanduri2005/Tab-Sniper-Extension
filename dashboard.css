@@ -107,6 +107,27 @@ body { overflow-x: clip; }
 .bars .fill { height: 100%; background: var(--m-blush); border-right: var(--line) solid var(--outline); }
 .bars .n { font-weight: 800; font-size: var(--fs-sm); }
 
+/* settings gate: locked banner, inline mini challenge, unlocked countdown */
+.gate {
+    max-width: 720px;
+    margin-bottom: var(--s4);
+    background: var(--surface);
+    border: var(--line-heavy) solid var(--outline);
+    border-radius: var(--r-md);
+    padding: var(--s4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--s3);
+}
+.gate.open { border-width: var(--line); background: transparent; border-style: dashed; }
+.gate-head { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.gate-head .text { flex: 1; min-width: 0; }
+.gate-head .label { font-weight: 800; display: flex; align-items: center; gap: var(--s2); }
+.gate-head .label svg { width: 18px; height: 18px; flex: none; }
+.gate-head .desc { color: var(--text-muted); font-size: var(--fs-sm); }
+.gate-body { background: var(--bg); border: var(--line) solid var(--outline); border-radius: var(--r-md); padding: var(--s4); }
+.setting.locked .control .field { opacity: 0.55; }
+
 /* settings */
 .settings { list-style: none; display: flex; flex-direction: column; gap: var(--s3); max-width: 720px; }
 .setting {

@@ -20,22 +20,23 @@ test("tightening applies instantly", () => {
     assert.equal(r.settings.pauseWaitSec, 300);
 });
 
-test("loosening waits the current cool-off", () => {
+test("loosening is refused while settings are locked", () => {
     const r = requestSettingChange(settings, [], "pauseCapMin", 60, NOW);
-    assert.equal(r.status, "pending");
+    assert.equal(r.status, "locked");
     assert.equal(r.settings.pauseCapMin, 30);
-    assert.equal(r.effectiveAt, NOW + 12 * HOUR_MS);
+    assert.equal(requestSettingChange(settings, [], "coolOffHours", 1, NOW).status, "locked");
+    assert.equal(requestSettingChange(settings, [], "watchCooldownMin", 10, NOW).status, "locked");
 });
 
-test("lowering cool-off waits the old (longer) value", () => {
-    const r = requestSettingChange(settings, [], "coolOffHours", 1, NOW);
-    assert.equal(r.status, "pending");
-    assert.equal(r.effectiveAt, NOW + 12 * HOUR_MS);
+test("loosening applies once unlocked", () => {
+    const r = requestSettingChange(settings, [], "coolOffHours", 1, NOW, { unlocked: true });
+    assert.equal(r.status, "applied");
+    assert.equal(r.settings.coolOffHours, 1);
 });
 
-test("tightening cancels a pending loosening for that key", () => {
-    const loose = requestSettingChange(settings, [], "pauseCapMin", 60, NOW);
-    const tight = requestSettingChange(loose.settings, loose.pending, "pauseCapMin", 15, NOW);
+test("tightening clears an old pending change for that key", () => {
+    const pending = [{ key: "pauseCapMin", value: 60, effectiveAt: NOW + HOUR_MS }];
+    const tight = requestSettingChange(settings, pending, "pauseCapMin", 15, NOW);
     assert.equal(tight.status, "applied");
     assert.equal(tight.pending.length, 0);
     assert.equal(tight.settings.pauseCapMin, 15);

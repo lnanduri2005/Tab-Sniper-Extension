@@ -2,6 +2,7 @@ import { send, formatDuration, formatClock } from "./lib/api.js";
 import { SETTING_LIMITS } from "./lib/defaults.js";
 import { createRoamer } from "./ui/roam.js";
 import { createTapper } from "./ui/status.js";
+import { CHALLENGE_LABELS } from "./challenges/index.js";
 import { say } from "./ui/voice.js";
 import { ICONS } from "./ui/icons.js";
 import { loadSoundSetting, setSoundEnabled, play } from "./ui/sound.js";
@@ -33,7 +34,7 @@ const PERCHES = [
     { id: "col-super", target: "#head-super", mode: "sit", align: 0.85, noWander: true },
     { id: "focus", target: "#panel-focus .side h2", mode: "sit", align: 0.85, noWander: true },
     { id: "stats", target: "#heat", mode: "sit", align: 0.96, noWander: true },
-    { id: "settings", target: "#settings", mode: "sit", align: 0.94, noWander: true }
+    { id: "settings", target: "#gate", mode: "sit", align: 0.94, noWander: true }
 ];
 const TAB_HOME = { overview: "overview", sites: "col-super", focus: "focus", stats: "stats", settings: "settings" };
 
@@ -490,6 +491,7 @@ function renderStats() {
 // ---------- settings ----------
 
 const NUMERIC = [
+    { key: "watchCooldownMin", label: "Watched cutoff cooldown", desc: "How long the first cutoff each day locks a Watched site. Each cutoff after that doubles it (up to 4h).", unit: "min", toInput: (v) => v, fromInput: Number },
     { key: "pauseWaitSec", label: "Pause wait", desc: "How long you wait on a page you can't leave before a super ban pauses.", unit: "min", toInput: (v) => v / 60, fromInput: (v) => Number(v) * 60 },
     { key: "pauseCapMin", label: "Daily pause allowance", desc: "Pause minutes per super-banned site per day.", unit: "min", toInput: (v) => v, fromInput: Number },
     { key: "coolOffHours", label: "Removal cool-off", desc: "Wait between finishing a removal challenge and confirming it.", unit: "hours", toInput: (v) => v, fromInput: Number }
@@ -497,11 +499,14 @@ const NUMERIC = [
 
 async function saveSetting(key, value) {
     const r = await send("updateSetting", { key, value });
+    if (r.status === "locked") {
+        say$("settings-message", r.error);
+        corner("Nice try. Unlock first.", "smug", 2400, "settings");
+        renderSettings();
+        return;
+    }
     if (!r.ok) return say$("settings-message", r.error, true);
-    if (r.status === "pending") {
-        say$("settings-message", `Easier setting scheduled for ${formatClock(r.effectiveAt)}.`);
-        corner("Nice try. That kicks in later.", "smug", 2400, "settings");
-    } else if (r.status === "applied") {
+    if (r.status === "applied") {
         say$("settings-message", "Saved.");
         mascot.react("nod");
     }
@@ -514,7 +519,85 @@ function settingRow({ label, desc, control, pending }) {
     ]);
 }
 
+// ---------- settings gate ----------
+
+let gateTick = null;
+let gateChallengeOpen = false;
+
+const unlocked = () => (state?.settingsUnlockedUntil || 0) > Date.now();
+
+function renderGate() {
+    clearInterval(gateTick);
+    const gate = $("gate");
+    if (gateChallengeOpen) return; // don't redraw over a challenge in progress
+    if (unlocked()) {
+        gate.className = "gate open";
+        const left = el("strong");
+        const tick = () => {
+            const ms = state.settingsUnlockedUntil - Date.now();
+            if (ms <= 0) {
+                clearInterval(gateTick);
+                refresh();
+                return;
+            }
+            left.textContent = formatDuration(ms);
+        };
+        tick();
+        gateTick = setInterval(tick, 1000);
+        gate.replaceChildren(el("div", { class: "gate-head" }, [
+            el("div", { class: "text" }, [
+                el("div", { class: "label", html: `${ICONS.sun}<span>Unlocked</span>` }),
+                el("div", { class: "desc" }, ["Locks again in ", left, ". Change what you came to change."])
+            ])
+        ]));
+        return;
+    }
+    gate.className = "gate";
+    gate.replaceChildren(el("div", { class: "gate-head" }, [
+        el("div", { class: "text" }, [
+            el("div", { class: "label", html: `${ICONS.lock}<span>Settings are locked</span>` }),
+            el("div", { class: "desc", text: "Beat a quick challenge to make me easier on you. It stays unlocked for 15 minutes." })
+        ]),
+        el("button", { class: "btn small", text: "Unlock", onclick: startGateChallenge })
+    ]));
+}
+
+async function startGateChallenge() {
+    const res = await send("getChallenge", { purpose: "settings" });
+    if (!res.ok) return say$("settings-message", res.error, true);
+    gateChallengeOpen = true;
+    const body = el("div", { class: "gate-body" });
+    $("gate").replaceChildren(
+        el("div", { class: "gate-head" }, [
+            el("div", { class: "text" }, [
+                el("div", { class: "label", html: `${ICONS.lock}<span>${CHALLENGE_LABELS[res.type]}</span>` }),
+                el("div", { class: "desc", text: "A short one. Leaving this tab keeps the same challenge." })
+            ]),
+            el("button", { class: "btn small ghost", text: "Never mind", onclick: () => { gateChallengeOpen = false; renderGate(); } })
+        ]),
+        body
+    );
+    corner("Go on then.", "mischievous", 2400, "settings");
+    const module = await import(`./challenges/${res.type}.js`);
+    module.mount(body, {
+        mini: true,
+        onEvent: (type) => {
+            if (type === "mistake") corner(say("challenge.mistake"), "smug");
+        },
+        onComplete: async () => {
+            const done = await send("challengeComplete", { purpose: "settings" });
+            gateChallengeOpen = false;
+            if (!done.ok) return say$("settings-message", done.error, true);
+            corner("Fine. 15 minutes. Make it count.", "grudging", 2600, "settings");
+            play("win");
+            await refresh();
+        }
+    });
+}
+
 function renderSettings() {
+    renderGate();
+    const open = unlocked();
     const rows = NUMERIC.map((def) => {
         const limits = SETTING_LIMITS[def.key];
         const input = el("input", {
@@ -526,14 +609,13 @@ function renderSettings() {
             "aria-label": def.label
         });
         input.addEventListener("change", () => saveSetting(def.key, def.fromInput(input.value)));
-        const p = state.pendingSettings.find((x) => x.key === def.key);
-        const pending = p
-            ? el("div", { class: "pending" }, [
-                `Changes to ${def.toInput(p.value)} ${def.unit} on ${formatClock(p.effectiveAt)}`,
-                el("button", { class: "btn small ghost", text: "Cancel", onclick: () => send("cancelPendingSetting", { key: def.key }) })
-            ])
-            : null;
-        return settingRow({ label: def.label, desc: def.desc, control: [input, el("span", { class: "muted small", text: def.unit })], pending });
+        // While locked, the field still accepts stricter values; easier ones get refused and reset.
+        const row = settingRow({ label: def.label, desc: def.desc, control: [input, el("span", { class: "muted small", text: def.unit })] });
+        if (!open) {
+            row.classList.add("locked");
+            input.title = "Stricter values save right away. Easier ones need the Settings unlock.";
+        }
+        return row;
     });
 
     const select = el("select", { class: "field", "aria-label": "When a banned site opens" }, [

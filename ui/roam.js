@@ -260,6 +260,7 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
         const finish = () => {
             place(target);
             setLayer(target.layer);
+            el.style.opacity = ""; // the pop-in animation below starts at opacity 0, so no flash
             el.animate(
                 [{ transform: `translate(${target.x}px, ${target.y + 40}px) rotate(${target.rot}deg) scale(0.6)`, opacity: 0 }, { transform: `translate(${target.x}px, ${target.y}px) rotate(${target.rot}deg) scale(1)`, opacity: 1 }],
                 { duration: reduceMotion() ? 0 : 380, easing: "cubic-bezier(0.34, 1.56, 0.64, 1)" }
@@ -272,7 +273,12 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
             [{ transform: `translate(${pos.x}px, ${pos.y}px) rotate(${pos.rot}deg)`, opacity: 1 }, { transform: `translate(${flyTo.x}px, ${flyTo.y}px) rotate(${pos.rot + spin}deg)`, opacity: 0 }],
             { duration: 450, easing: "cubic-bezier(0.2, 0.6, 0.4, 1)" }
         );
-        anim.onfinish = () => setTimeout(finish, 650);
+        anim.onfinish = () => {
+            // Stay invisible while "off-screen": without this the element snaps back to where it
+            // was dropped (the fly animation doesn't hold its end frame) and flashes for 650ms.
+            el.style.opacity = "0";
+            setTimeout(finish, 650);
+        };
         scheduleWander();
     }
 
