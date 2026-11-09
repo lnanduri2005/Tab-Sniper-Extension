@@ -22,6 +22,8 @@ async function init() {
         $("title").textContent = `${domain} is super banned`;
         $("lead").textContent = "Blocked around the clock. You set this up for a reason.";
         renderPause(info);
+    } else if (category === "watched") {
+        renderCooldown(info);
     } else {
         $("title").textContent = `${domain} is banned right now`;
         $("lead").textContent = "This site is on your ban list.";
@@ -39,6 +41,25 @@ async function init() {
             $("ban-help").textContent = "Turn Tab Sniper off from the toolbar popup to visit it.";
         }
     }
+}
+
+function renderCooldown(info) {
+    const cooldown = info.cooldown;
+    $("title").textContent = `Cooldown: ${domain}`;
+    $("lead").textContent = cooldown ? `You hit your limit: ${cooldown.reason}.` : "You hit your limit.";
+    $("ban-card").hidden = false;
+    const tick = () => {
+        const left = (cooldown?.until || 0) - Date.now();
+        if (left <= 0) {
+            location.replace(url || `https://${domain}`);
+            return;
+        }
+        $("ban-help").textContent =
+            `Back in ${formatDuration(left)}. Trip #${info.tripsToday} today. ` +
+            `Next one locks you out for ${info.nextCooldownMin} min. Cooldowns can't be paused.`;
+    };
+    tick();
+    setInterval(tick, 1000);
 }
 
 function renderPause(info) {

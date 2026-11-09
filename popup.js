@@ -30,6 +30,7 @@ async function refresh() {
     renderPresets();
     renderBans();
     renderSuperBans();
+    renderWatched();
     renderHistory();
     renderStats();
 }
@@ -163,6 +164,30 @@ function renderSuperBans() {
     }
 }
 
+function watchLabel(w) {
+    if (w.cooldown) return `cooldown ${formatDuration(w.cooldown.until - Date.now())}`;
+    const top = [...w.usage].sort((a, b) => b.used / b.limit - a.used / a.limit)[0];
+    if (!top || top.used < 1) return "watching";
+    return top.kind === "swipes" ? `${top.used}/${top.limit} swipes` : `${Math.floor(top.used)}/${top.limit} min`;
+}
+
+function renderWatched() {
+    const list = $("watch-list");
+    list.replaceChildren();
+    if (!state.watched.length) {
+        list.append(el("div", { class: "empty-state", text: "No watched sites yet" }));
+        return;
+    }
+    for (const w of state.watched) {
+        list.append(
+            el("li", { class: "list-item" }, [
+                el("span", { class: "list-item-text", text: w.domain }),
+                el("span", { style: "font-size: 12px; color: var(--text-secondary);", text: watchLabel(w) })
+            ])
+        );
+    }
+}
+
 function renderHistory() {
     const list = $("history-list");
     list.replaceChildren();
@@ -238,6 +263,7 @@ $("toggle-switch").addEventListener("change", async () => {
 });
 
 $("dashboard-btn").addEventListener("click", () => chrome.runtime.openOptionsPage());
+$("watch-manage-btn").addEventListener("click", () => chrome.runtime.openOptionsPage());
 
 $("start-timer-btn").addEventListener("click", () => {
     const minutes = parseInt($("timer-minutes").value, 10);
@@ -285,5 +311,9 @@ $("url-input").addEventListener("keydown", (e) => e.key === "Enter" && addBan())
 $("add-super-btn").addEventListener("click", addSuperBan);
 $("super-input").addEventListener("keydown", (e) => e.key === "Enter" && addSuperBan());
 
-chrome.storage.onChanged.addListener(() => refresh());
+const NOISY_KEYS = new Set(["watch", "activeFocus"]);
+chrome.storage.onChanged.addListener((changes) => {
+    if (Object.keys(changes).every((k) => NOISY_KEYS.has(k))) return;
+    refresh();
+});
 refresh();

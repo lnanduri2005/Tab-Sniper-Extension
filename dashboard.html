@@ -24,6 +24,18 @@
         </section>
 
         <section class="card">
+            <h2>Watched sites</h2>
+            <p class="muted">Allowed, but cut off when you doomscroll: too long in one visit, too long on Shorts/Reels/feeds, or too many swipes. Warns at 80%, then a cooldown that doubles with each trip today.</p>
+            <form class="row" id="watch-form" style="margin: 14px 0;">
+                <select id="watch-profile" aria-label="Site to watch"></select>
+                <input type="text" id="watch-input" placeholder="news.ycombinator.com" style="flex:1;" aria-label="Custom domain to watch" hidden>
+                <button class="btn" type="submit">Watch</button>
+            </form>
+            <div class="message" id="watch-message"></div>
+            <ul class="list" id="watch-list"></ul>
+        </section>
+
+        <section class="card">
             <h2>Bans</h2>
             <p class="muted">Blocked while Tab Sniper is on or a focus session runs. Removable when it's off.</p>
             <form class="row" id="ban-form" style="margin: 14px 0;">

@@ -32,9 +32,102 @@ async function refresh() {
     if (!res.ok) return;
     state = res;
     renderSuperBans();
+    renderWatched();
     renderBans();
     renderSettings();
 }
+
+const WATCH_FIELDS = [
+    { key: "visitLimitMin", label: "per visit", unit: "min" },
+    { key: "streakLimitMin", label: "short-form in a row", unit: "min" },
+    { key: "swipeLimit", label: "swipes per window", unit: "" }
+];
+
+function usageText(usage) {
+    const names = { visit: "visit", streak: "short-form streak", swipes: "swipes" };
+    return usage
+        .map((m) => `${names[m.kind]} ${Math.floor(m.used)}/${m.limit}${m.kind === "swipes" ? "" : " min"}`)
+        .join(" · ");
+}
+
+function renderWatched() {
+    const select = $("watch-profile");
+    const current = select.value;
+    const taken = new Set(state.watched.map((w) => w.domain));
+    select.replaceChildren(
+        ...state.profiles
+            .filter((p) => !taken.has(p.domain))
+            .map((p) => el("option", { value: p.key, text: p.label })),
+        el("option", { value: "", text: "Custom domain..." })
+    );
+    if ([...select.options].some((o) => o.value === current)) select.value = current;
+    $("watch-input").hidden = select.value !== "";
+
+    const list = $("watch-list");
+    list.replaceChildren();
+    if (!state.watched.length) {
+        list.append(el("li", { class: "muted", text: "No watched sites yet." }));
+        return;
+    }
+    for (const w of state.watched) {
+        const cooling = !!w.cooldown;
+        const status = cooling
+            ? el("span", { class: "chip warn", text: `cooldown ${formatDuration(w.cooldown.until - Date.now())}` })
+            : el("span", { class: "chip", text: w.tripsToday ? `${w.tripsToday} trips today` : "watching" });
+
+        const limits = WATCH_FIELDS.filter((f) => f.key in w).map((f) => {
+            const input = el("input", { type: "number", value: String(w[f.key]), style: "width: 70px;", "aria-label": `${w.domain} ${f.label}` });
+            input.disabled = cooling;
+            input.addEventListener("change", async () => {
+                const r = await send("updateWatched", { domain: w.domain, field: f.key, value: input.value });
+                say("watch-message", r.ok ? `Saved ${w.domain} ${f.label}: ${r.value}${f.unit ? " " + f.unit : ""}.` : r.error, !r.ok);
+            });
+            return el("label", { class: "muted row", style: "gap: 6px;" }, [input, `${f.unit} ${f.label}`.trim()]);
+        });
+
+        const remove = el("button", {
+            class: "btn small ghost",
+            text: "Remove",
+            onclick: async () => {
+                const r = await send("removeWatched", { domain: w.domain });
+                if (!r.ok) say("watch-message", r.error, true);
+            }
+        });
+        remove.disabled = cooling;
+        if (cooling) remove.title = "Locked until the cooldown ends";
+
+        list.append(
+            el("li", { style: "flex-direction: column; align-items: stretch;" }, [
+                el("div", { class: "row" }, [
+                    el("div", {}, [
+                        el("div", { class: "name", text: w.label ? `${w.label} (${w.domain})` : w.domain }),
+                        el("div", { class: "muted", text: cooling ? `Tripped: ${w.cooldown.reason}` : usageText(w.usage) })
+                    ]),
+                    status,
+                    el("span", { class: "spacer" }),
+                    remove
+                ]),
+                el("div", { class: "row", style: "gap: 16px;" }, limits)
+            ])
+        );
+    }
+}
+
+$("watch-profile").addEventListener("change", () => {
+    $("watch-input").hidden = $("watch-profile").value !== "";
+});
+
+$("watch-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const profile = $("watch-profile").value;
+    const r = await send("addWatched", profile ? { profile } : { input: $("watch-input").value });
+    if (r.ok) {
+        $("watch-input").value = "";
+        say("watch-message", `Watching ${r.domain}.`);
+    } else {
+        say("watch-message", r.error, true);
+    }
+});
 
 function superStatus(s) {
     const now = Date.now();
@@ -223,6 +316,10 @@ $("ban-form").addEventListener("submit", async (e) => {
     }
 });
 
-chrome.storage.onChanged.addListener(() => refresh());
+const NOISY_KEYS = new Set(["watch", "activeFocus"]);
+chrome.storage.onChanged.addListener((changes) => {
+    if (Object.keys(changes).every((k) => NOISY_KEYS.has(k))) return;
+    refresh();
+});
 setInterval(refresh, 30000);
 refresh();
