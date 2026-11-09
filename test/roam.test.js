@@ -53,6 +53,8 @@ test("bubble opens on the side with room", () => {
     const bubble = { w: 240, h: 60 };
     assert.equal(bubbleSide({ x: 900, y: 400, w: 100, h: 80 }, vp, bubble), "left");
     assert.equal(bubbleSide({ x: 40, y: 400, w: 100, h: 80 }, vp, bubble), "right");
+    assert.equal(bubbleSide({ x: 600, y: 400, w: 100, h: 80 }, vp, bubble, "right"), "right", "preferred side wins when it fits");
+    assert.equal(bubbleSide({ x: 1050, y: 400, w: 100, h: 80 }, vp, bubble, "right"), "left", "falls back when it doesn't");
 });
 
 import { statusFacts } from "../ui/status.js";

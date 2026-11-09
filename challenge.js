@@ -1,6 +1,6 @@
 import { send, formatClock } from "./lib/api.js";
 import { CHALLENGE_LABELS } from "./challenges/index.js";
-import { createMascot } from "./ui/mascot.js";
+import { createRoamer } from "./ui/roam.js";
 import { say } from "./ui/voice.js";
 import { loadSoundSetting, play } from "./ui/sound.js";
 import { el, $ } from "./ui/dom.js";
@@ -9,14 +9,24 @@ const params = new URLSearchParams(location.search);
 const purpose = params.get("purpose");
 const domain = params.get("d") || "";
 
-const mascot = createMascot({ mood: "mischievous", label: "Tab Sniper mascot refereeing" });
-$("mascot-slot").append(mascot.el);
-mascot.on((evt) => evt === "poke" && play("poke"));
+// The referee hops around the task window: leans in on mistakes, edges closer (and gets
+// nervous) as you near the finish. It never sits on the task itself.
+const roamer = createRoamer({ mood: "mischievous", size: 104, play, onTap: () => roamer.mascot.poke() });
+const mascot = roamer.mascot;
+roamer.setPerches([
+    { id: "top-right", target: ".task", mode: "sit", align: 0.86 },
+    { id: "top-left", target: ".task", mode: "sit", align: 0.3 },
+    { id: "top-mid", target: ".task", mode: "sit", align: 0.6 },
+    { id: "peek-right", target: ".task", mode: "peek", side: "right", align: 0.45, bubble: "right" },
+    { id: "peek-left", target: ".task", mode: "peek", side: "left", align: 0.6, bubble: "left" }
+]);
+roamer.setStill(true);
 
 let nervous = false;
+const LEAN_IN = ["top-left", "top-mid", "top-right", "peek-right", "peek-left"];
 
 function speak(key, vars) {
-    $("bubble").textContent = say(key, vars);
+    roamer.say(say(key, vars));
 }
 
 function showResult(text, { error = false, dashboard = false } = {}) {
@@ -29,15 +39,14 @@ function showResult(text, { error = false, dashboard = false } = {}) {
 
 function onEvent(type, value) {
     if (type === "mistake") {
-        speak("challenge.mistake");
-        mascot.express("smug", 1600);
-        mascot.react("bounce");
+        const options = LEAN_IN.filter((p) => p !== roamer.perchId);
+        roamer.goTo(options[Math.floor(Math.random() * options.length)], { mood: "smug", say: say("challenge.mistake") });
         play("oops");
     } else if (type === "progress") {
         if (value >= 0.7 && !nervous) {
             nervous = true;
             mascot.setMood("nervous");
-            speak("challenge.close");
+            roamer.goTo("top-mid", { say: say("challenge.close") });
         } else {
             mascot.react("nod");
         }
@@ -49,8 +58,7 @@ async function init() {
     loadSoundSetting();
     const res = await send("getChallenge", { purpose, domain });
     if (!res.ok) {
-        mascot.setMood("grudging");
-        speak("challenge.start");
+        roamer.goTo("top-right", { instant: true, mood: "grudging" });
         $("task-label").textContent = "Nothing to do";
         showResult(res.error, { error: true, dashboard: true });
         return;
@@ -65,7 +73,7 @@ async function init() {
         $("title").textContent = "End focus early";
         $("lead").textContent = "A short one. Finish it to end your session (logged as ended early).";
     }
-    speak("challenge.start");
+    roamer.goTo("top-right", { instant: true, say: say("challenge.start") });
 
     const module = await import(`./challenges/${res.type}.js`);
     module.mount($("challenge-root"), { mini: res.mini, onComplete, onEvent });

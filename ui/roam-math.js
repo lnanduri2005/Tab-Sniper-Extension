@@ -76,12 +76,14 @@ export function releaseVelocity(samples) {
 }
 
 // Which side of the mascot the bubble opens on, given free room around it.
-export function bubbleSide(box, viewport, bubble) {
+export function bubbleSide(box, viewport, bubble, prefer = null) {
     const room = {
         left: box.x - viewport.left,
         right: viewport.left + viewport.width - (box.x + box.w),
         top: box.y - viewport.top
     };
+    if (prefer === "top" && room.top >= bubble.h + 16) return "top";
+    if (prefer && prefer !== "top" && room[prefer] >= bubble.w + 16) return prefer;
     if (room.left >= bubble.w + 16) return "left";
     if (room.right >= bubble.w + 16) return "right";
     if (room.top >= bubble.h + 16) return "top";

@@ -75,7 +75,8 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
         if (bubble.hidden) return;
         const viewport = { left: scrollX, top: scrollY, width: innerWidth, height: innerHeight };
         const b = { w: bubble.offsetWidth, h: bubble.offsetHeight };
-        const side = bubbleSide({ ...pos, w: box.w, h: box.h }, viewport, b);
+        const prefer = perches.find((p) => p.id === currentId)?.bubble || null;
+        const side = bubbleSide({ ...pos, w: box.w, h: box.h }, viewport, b, prefer);
         bubble.dataset.side = side;
         let x, y;
         if (side === "left") { x = pos.x - b.w - 14; y = pos.y + box.h * 0.45 - b.h / 2; }
@@ -322,6 +323,14 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
         setPerches,
         relayout,
         get perchId() { return currentId; },
+        hide() {
+            hideBubble();
+            el.hidden = true;
+        },
+        show() {
+            el.hidden = false;
+            relayout();
+        },
         setStill(v) {
             holdStill = !!v;
             scheduleWander();
