@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Blocked · Tab Sniper</title>
+    <link rel="stylesheet" href="pages.css">
+</head>
+<body>
+    <main>
+        <img src="icon_mischiveous.png" class="mascot" alt="">
+        <h1 id="title">Blocked</h1>
+        <p class="lead" id="lead"></p>
+
+        <div class="card" id="attempts-card">
+            <div id="attempts"></div>
+        </div>
+
+        <div class="card" id="pause-card" hidden>
+            <h2>Need it for a minute?</h2>
+            <p class="muted" id="pause-help"></p>
+            <div class="row" id="pause-options" style="margin-top: 12px;"></div>
+        </div>
+
+        <div class="card" id="ban-card" hidden>
+            <p id="ban-help"></p>
+        </div>
+    </main>
+    <script type="module" src="blocked.js"></script>
+</body>
+</html>

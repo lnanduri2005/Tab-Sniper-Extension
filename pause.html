@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pause countdown · Tab Sniper</title>
+    <link rel="stylesheet" href="pages.css">
+</head>
+<body>
+    <main>
+        <img src="icon_idle.png" class="mascot" alt="">
+        <h1 id="title">Waiting...</h1>
+        <p class="lead">Stay on this tab. Switching away or minimizing restarts the countdown.</p>
+        <div class="card">
+            <div class="big-timer" id="countdown">--:--</div>
+            <p class="muted" style="text-align:center;" id="detail"></p>
+            <div class="message" id="message" style="text-align:center;"></div>
+            <div class="row" style="justify-content:center; margin-top: 12px;">
+                <button class="btn ghost" id="cancel">Never mind</button>
+            </div>
+        </div>
+    </main>
+    <script type="module" src="pause.js"></script>
+</body>
+</html>

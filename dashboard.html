@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tab Sniper Dashboard</title>
+    <link rel="stylesheet" href="pages.css">
+</head>
+<body>
+    <main>
+        <img src="icon_mischiveous.png" class="mascot" alt="">
+        <h1>Tab Sniper</h1>
+        <p class="lead">Manage bans, super bans and settings.</p>
+
+        <section class="card">
+            <h2>Super bans</h2>
+            <p class="muted">Blocked 24/7, even when Tab Sniper is off. Removing one takes a random challenge plus a cool-off.</p>
+            <form class="row" id="super-form" style="margin: 14px 0;">
+                <input type="text" id="super-input" placeholder="instagram.com" style="flex:1;" aria-label="Site to super ban">
+                <button class="btn" type="submit">Super ban</button>
+            </form>
+            <div class="message" id="super-message"></div>
+            <ul class="list" id="super-list"></ul>
+        </section>
+
+        <section class="card">
+            <h2>Bans</h2>
+            <p class="muted">Blocked while Tab Sniper is on or a focus session runs. Removable when it's off.</p>
+            <form class="row" id="ban-form" style="margin: 14px 0;">
+                <input type="text" id="ban-input" placeholder="reddit.com" style="flex:1;" aria-label="Site to ban">
+                <button class="btn" type="submit">Ban</button>
+            </form>
+            <div class="message" id="ban-message"></div>
+            <ul class="list" id="ban-list"></ul>
+        </section>
+
+        <section class="card">
+            <h2>Settings</h2>
+            <p class="muted">Making super bans easier (shorter wait, bigger cap, shorter cool-off) only takes effect after the current cool-off. Making them stricter applies instantly.</p>
+            <ul class="list" id="settings-list" style="margin-top: 10px;"></ul>
+            <div class="message" id="settings-message"></div>
+        </section>
+    </main>
+    <script type="module" src="dashboard.js"></script>
+</body>
+</html>
