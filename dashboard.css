@@ -14,7 +14,27 @@ body { overflow-x: clip; }
 .dash .titlebar { height: 52px; }
 .dash .tab { font-size: var(--fs-md); padding: 7px 18px 8px; }
 .dash .tab[aria-selected="true"] { padding-bottom: 10px; }
-.app-name { margin-left: auto; align-self: center; font-weight: 800; padding-right: var(--s3); color: var(--m-ink); }
+/* awake/asleep state + wake/nap, right side of the title bar */
+.state-pill { margin-left: auto; align-self: center; display: flex; align-items: center; gap: var(--s2); padding-right: var(--s2); }
+.state-pill .state { font-weight: 800; font-size: var(--fs-sm); color: var(--m-ink); white-space: nowrap; }
+.state-pill .btn { --press: 3px; }
+.state-pill .btn svg { width: 15px; height: 15px; }
+
+/* a visible reason next to anything that's locked, instead of a hover tooltip */
+.lock-note {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    flex-wrap: wrap;
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    color: var(--text-muted);
+    padding: var(--s2) var(--s3);
+    border: var(--line) dashed var(--surface-2);
+    border-radius: var(--r-md);
+}
+.lock-note svg { width: 15px; height: 15px; flex: none; }
+.lock-note .text { flex: 1; min-width: 0; }
 
 .panel { padding: var(--s6) var(--s6) var(--s7); }
 .panel-title { font-size: var(--fs-2xl); margin-bottom: var(--s4); }
@@ -128,7 +148,10 @@ body { overflow-x: clip; }
 .gate-head .label svg { width: 18px; height: 18px; flex: none; }
 .gate-head .desc { color: var(--text-muted); font-size: var(--fs-sm); }
 .gate-body { background: var(--bg); border: var(--line) solid var(--outline); border-radius: var(--r-md); padding: var(--s4); }
-.setting.locked .control .field { opacity: 0.55; }
+.setting .hint { display: flex; align-items: center; gap: 5px; font-size: var(--fs-xs); font-weight: 700; color: var(--text-muted); margin-top: 3px; }
+.setting .hint svg { width: 12px; height: 12px; }
+.setting .row-status { font-size: var(--fs-xs); font-weight: 800; color: var(--note); margin-top: 3px; min-height: 0; }
+.setting .row-status:empty { display: none; }
 
 /* settings */
 .settings { list-style: none; display: flex; flex-direction: column; gap: var(--s3); max-width: 720px; }
@@ -166,16 +189,20 @@ body { overflow-x: clip; }
     .split { grid-template-columns: minmax(0, 1fr); }
     .panel { padding: var(--s5) var(--s4) var(--s7); }
     .dash .tabs { overflow-x: auto; }
-    .app-name { display: none; }
+    .state-pill .state { display: none; }
 }
 @media (max-width: 560px) {
     .dash-wrap { padding: 84px var(--s2) var(--s6); }
     .dash .titlebar .dots { gap: 4px; padding: 0 2px; }
     .dash .titlebar .dot { width: 9px; height: 9px; border-width: 2px; }
     .dash .tabs { gap: 1px; }
-    .dash .tab { padding: 5px 7px 6px; font-size: var(--fs-xs); }
+    .dash .tab { padding: 5px 6px 6px; font-size: var(--fs-xs); }
     .dash .tab[aria-selected="true"] { padding-bottom: 8px; }
+    .state-pill { padding-right: 0; }
+    .state-pill .btn { padding: 5px 8px; }
+    .state-pill .btn span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .heat { gap: 3px; }
     .heat .cell { border-width: 1.5px; border-radius: 4px; }
 }
 .bars li.empty { display: block; }
+.row .meta.hot { color: var(--note); font-weight: 700; }

@@ -161,6 +161,9 @@ body.asleep .titlebar .dot { filter: saturate(0.3) brightness(0.85); }
 .group-head h2 { font-size: var(--fs-md); }
 .group-head .count { color: var(--text-muted); font-weight: 700; font-size: var(--fs-sm); }
 
+.lock-note { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); font-weight: 700; color: var(--text-muted); }
+.lock-note svg { width: 13px; height: 13px; flex: none; }
+
 .link-btn {
     font: inherit;
     font-weight: 700;

@@ -23,7 +23,7 @@
                     <button class="tab" role="tab" id="tab-stats" aria-controls="panel-stats">Stats</button>
                     <button class="tab" role="tab" id="tab-settings" aria-controls="panel-settings">Settings</button>
                 </div>
-                <span class="app-name">Tab Sniper</span>
+                <div class="state-pill" id="state-pill" aria-live="polite"></div>
             </div>
 
             <div class="screen">
@@ -55,6 +55,7 @@
                                 <button class="btn small cream" type="submit">Add</button>
                             </form>
                             <p class="message" id="ban-message" aria-live="polite"></p>
+                            <div class="lock-note" id="ban-lock" hidden></div>
                             <ul class="rows" id="ban-list"></ul>
                         </div>
                         <div class="column" id="col-watched">

@@ -503,7 +503,7 @@ const handlers = {
 
     async removeBan({ domain }) {
         const state = await loadState();
-        if (bansActive(state, Date.now())) return { ok: false, error: "Turn Tab Sniper off to remove bans" };
+        if (bansActive(state, Date.now())) return { ok: false, error: "Bans can only be removed while I'm napping. Nap first." };
         await chrome.storage.local.set({ bans: state.bans.filter((d) => d !== domain) });
         return { ok: true };
     },

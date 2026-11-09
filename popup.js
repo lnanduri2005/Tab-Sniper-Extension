@@ -279,7 +279,7 @@ function renderSites() {
         return siteRow("super", s.domain, meta, iconButton("arrow", `Manage ${s.domain}`, () => chrome.runtime.openOptionsPage()));
     });
     const watched = state.watched.map((w) =>
-        siteRow("watched", w.domain, w.cooldown ? `cooldown ${formatDuration(w.cooldown.until - now)}` : w.label || "custom",
+        siteRow("watched", w.domain, w.cooldown ? `cooldown ${formatDuration(w.cooldown.until - now)} · locked till then` : w.label || "custom",
             iconButton("x", `Stop watching ${w.domain}`, async () => {
                 const r = await send("removeWatched", { domain: w.domain });
                 if (!r.ok) return sitesError(r.error);
@@ -293,15 +293,19 @@ function renderSites() {
             mascot.express("grudging", 1400);
         }, { disabled: state.bansActive, title: state.bansActive ? "Nap first to remove bans" : null }))
     );
+    const banLock = state.bansActive && state.bans.length
+        ? el("p", { class: "lock-note", html: `${ICONS.lock}<span>${state.timer ? "Locked during your focus session." : "Bans can only be removed while I'm napping."}</span>` })
+        : null;
 
-    const group = (title, tier, items, emptyText) =>
+    const group = (title, tier, items, emptyText, note = null) =>
         el("section", { class: "group" }, [
             el("div", { class: "group-head" }, [tierIcon(tier), el("h2", { text: title }), el("span", { class: "count", text: items.length })]),
+            note,
             items.length ? el("ul", { class: "rows" }, items) : el("p", { class: "empty", text: emptyText })
         ]);
 
     // least to most intense
-    groups.push(group("Bans", "ban", bans, "Blocked while I'm awake."));
+    groups.push(group("Bans", "ban", bans, "Blocked while I'm awake.", banLock));
     groups.push(group("Watched", "watched", watched, "Allowed, but cut off when you doomscroll."));
     groups.push(group("Super bans", "super", supers, "Locked 24/7. Undo takes a challenge and a 12h wait."));
     $("site-groups").replaceChildren(...groups);

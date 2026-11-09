@@ -35,7 +35,7 @@ const PERCHES = [
     { id: "col-super", target: "#head-super", mode: "sit", align: 0.85, noWander: true },
     { id: "focus", target: "#panel-focus .side h2", mode: "sit", align: 0.85, noWander: true },
     { id: "stats", target: "#heat", mode: "sit", align: 0.96, noWander: true },
-    { id: "settings", target: "#gate", mode: "sit", align: 0.94, noWander: true }
+    { id: "settings", target: ".dash", mode: "sit", align: 0.78, noWander: true }
 ];
 const TAB_HOME = { overview: "overview", sites: "col-super", focus: "focus", stats: "stats", settings: "settings" };
 
@@ -65,6 +65,7 @@ async function refresh() {
     state = res;
     mascot.setMood(state.timer ? "idle" : state.bansActive ? "mischievous" : "sleep");
     roamer.setStill(!!state.settings.mascotStill);
+    renderStatePill();
     renderOverview();
     renderStats();
     // Don't redraw a region while someone is editing a field inside it (Watched limits,
@@ -77,6 +78,39 @@ async function refresh() {
     else renderSites();
     if (!editingIn("focus-box")) renderFocus();
     if (!editingIn("settings")) renderSettings();
+}
+
+// ---------- awake / asleep, in plain words, with its own button ----------
+
+async function toggleAwake() {
+    const turningOn = !state.bansActive;
+    const r = await send("toggle", { enabled: turningOn });
+    if (!r.ok) return corner(r.error, "grudging");
+    if (turningOn) {
+        corner("Awake. Try me.", "happy");
+        mascot.react("bounce");
+        play("happy");
+    } else {
+        corner("Napping. Super bans and Watched sites still count.", "grudging");
+    }
+}
+
+function napButton(label = "Nap") {
+    return el("button", { class: "btn small cream", html: `${ICONS.moon}<span>${label}</span>`, onclick: toggleAwake });
+}
+
+function renderStatePill() {
+    const pill = $("state-pill");
+    if (state.timer) {
+        pill.replaceChildren(el("span", { class: "state", html: `${ICONS.lock} Focus session: bans locked on` }));
+    } else if (state.bansActive) {
+        pill.replaceChildren(el("span", { class: "state", text: "Awake: bans on" }), napButton());
+    } else {
+        pill.replaceChildren(
+            el("span", { class: "state", text: "Asleep: bans off" }),
+            el("button", { class: "btn small", html: `${ICONS.sun}<span>Wake up</span>`, onclick: toggleAwake })
+        );
+    }
 }
 
 // ---------- overview ----------
@@ -191,7 +225,7 @@ function superRow(b) {
         }));
     }
     return el("li", { class: "row" }, [
-        el("div", { class: "grow" }, [el("div", { class: "name", text: b.domain }), el("div", { class: `meta ${hot ? "when hot" : ""}`, text: meta })]),
+        el("div", { class: "grow" }, [el("div", { class: "name", text: b.domain }), el("div", { class: `meta ${hot ? "hot" : ""}`, text: meta })]),
         el("div", { class: "actions" }, actions)
     ]);
 }
@@ -203,7 +237,7 @@ const WATCH_FIELDS = [
 ];
 
 function watchMeta(w) {
-    if (w.cooldown) return `cooldown ${formatDuration(w.cooldown.until - Date.now())}: ${w.cooldown.reason}`;
+    if (w.cooldown) return `Cooldown, ${formatDuration(w.cooldown.until - Date.now())} left (${w.cooldown.reason}). Locked until it ends.`;
     const names = { visit: "visit", streak: "short-form", swipes: "swipes" };
     const parts = w.usage.map((m) => `${names[m.kind]} ${Math.floor(m.used)}/${m.limit}`);
     return `${w.label || "custom"} · ${parts.join(" · ")}${w.tripsToday ? ` · ${w.tripsToday} cutoffs today` : ""}`;
@@ -222,7 +256,7 @@ function watchRow(w) {
         return el("label", {}, [input, f.label]);
     });
     return el("li", { class: "row" }, [
-        el("div", { class: "grow" }, [el("div", { class: "name", text: w.domain }), el("div", { class: `meta ${cooling ? "when hot" : ""}`, text: watchMeta(w) })]),
+        el("div", { class: "grow" }, [el("div", { class: "name", text: w.domain }), el("div", { class: `meta ${cooling ? "hot" : ""}`, text: watchMeta(w) })]),
         iconButton("x", `Stop watching ${w.domain}`, async () => {
             const r = await send("removeWatched", { domain: w.domain });
             if (!r.ok) return say$("watch-message", r.error, true);
@@ -240,6 +274,15 @@ function renderSiteLists({ skipWatched = false } = {}) {
     colHead("head-super", "super", "Super bans", state.superBans.length);
     colHead("head-watched", "watched", "Watched", state.watched.length);
     colHead("head-ban", "ban", "Bans", state.bans.length);
+    const lock = $("ban-lock");
+    lock.hidden = !state.bansActive || !state.bans.length;
+    if (!lock.hidden) {
+        lock.replaceChildren(
+            el("span", { html: ICONS.lock }),
+            el("span", { class: "text", text: state.timer ? "Locked during your focus session." : "Bans can only be removed while I'm napping." }),
+            state.timer ? null : napButton()
+        );
+    }
 
     $("super-list").replaceChildren(...(state.superBans.length ? state.superBans.map(superRow) : [el("li", { class: "empty", text: "No super bans yet." })]));
     if (!skipWatched) {
@@ -254,7 +297,7 @@ function renderSiteLists({ skipWatched = false } = {}) {
                         const r = await send("removeBan", { domain: d });
                         if (!r.ok) return say$("ban-message", r.error, true);
                         mascot.express("grudging", 1400);
-                    }, { disabled: state.bansActive, title: state.bansActive ? "Put me to sleep first to remove bans" : null })
+                    }, { disabled: state.bansActive, title: state.bansActive ? "Nap first to remove bans" : null })
                 ]))
             : [el("li", { class: "empty", text: "No bans yet." })])
     );
@@ -488,27 +531,43 @@ const NUMERIC = [
     { key: "watchCooldownMin", label: "Watched cutoff cooldown", desc: "How long the first cutoff each day locks a Watched site. Each cutoff after that doubles it (up to 4h).", unit: "min", toInput: (v) => v, fromInput: Number },
     { key: "pauseWaitSec", label: "Pause wait", desc: "How long you wait on a page you can't leave before a super ban pauses.", unit: "min", toInput: (v) => v / 60, fromInput: (v) => Number(v) * 60 },
     { key: "pauseCapMin", label: "Daily pause allowance", desc: "Pause minutes per super-banned site per day.", unit: "min", toInput: (v) => v, fromInput: Number },
-    { key: "coolOffHours", label: "Removal cool-off", desc: "Wait between finishing a removal challenge and confirming it.", unit: "hours", toInput: (v) => v, fromInput: Number }
+    { key: "coolOffHours", label: "Removal wait", desc: "How long after beating a removal challenge before you can remove a super ban.", unit: "hours", toInput: (v) => v, fromInput: Number }
 ];
+
+// Feedback lands on the row you changed, not at the bottom of the list. Kept for a few
+// seconds so the refresh that follows a save doesn't wipe it.
+const rowMessages = {};
+function rowStatus(key, text) {
+    rowMessages[key] = { text, until: Date.now() + 4000 };
+    const slot = document.querySelector(`.setting[data-key="${key}"] .row-status`);
+    if (slot) slot.textContent = text;
+    else say$("settings-message", text);
+}
 
 async function saveSetting(key, value) {
     const r = await send("updateSetting", { key, value });
     if (r.status === "locked") {
-        say$("settings-message", r.error);
         corner("Nice try. Unlock first.", "smug", 2400, "settings");
         renderSettings();
+        rowStatus(key, "That would make me easier on you. Unlock Settings first.");
         return;
     }
-    if (!r.ok) return say$("settings-message", r.error, true);
+    if (!r.ok) return rowStatus(key, r.error);
     if (r.status === "applied") {
-        say$("settings-message", "Saved.");
+        rowStatus(key, "Saved.");
         mascot.react("nod");
     }
 }
 
-function settingRow({ label, desc, control, pending }) {
-    return el("li", { class: "setting" }, [
-        el("div", { class: "text" }, [el("div", { class: "label", text: label }), el("div", { class: "desc", text: desc }), pending]),
+function settingRow({ key = null, label, desc, control, pending, hint = null }) {
+    return el("li", { class: "setting", "data-key": key }, [
+        el("div", { class: "text" }, [
+            el("div", { class: "label", text: label }),
+            el("div", { class: "desc", text: desc }),
+            hint ? el("div", { class: "hint", html: `${ICONS.lock}<span>${hint}</span>` }) : null,
+            pending,
+            el("div", { class: "row-status", role: "status", text: key && rowMessages[key]?.until > Date.now() ? rowMessages[key].text : "" })
+        ]),
         el("div", { class: "control" }, control)
     ]);
 }
@@ -656,12 +715,13 @@ function renderSettings() {
         });
         input.addEventListener("change", () => saveSetting(def.key, def.fromInput(input.value)));
         // While locked, the field still accepts stricter values; easier ones get refused and reset.
-        const row = settingRow({ label: def.label, desc: def.desc, control: [input, el("span", { class: "muted small", text: def.unit })] });
-        if (!open) {
-            row.classList.add("locked");
-            input.title = "Stricter values save right away. Easier ones need the Settings unlock.";
-        }
-        return row;
+        return settingRow({
+            key: def.key,
+            label: def.label,
+            desc: def.desc,
+            hint: open ? null : "Stricter saves right away. Easier needs the unlock.",
+            control: [input, el("span", { class: "muted small", text: def.unit })]
+        });
     });
 
     const select = el("select", { class: "field", "aria-label": "When a banned site opens" }, [
@@ -670,7 +730,7 @@ function renderSettings() {
     ]);
     select.value = state.settings.blockAction;
     select.addEventListener("change", () => saveSetting("blockAction", select.value));
-    rows.push(settingRow({ label: "When a banned site opens", desc: "Super bans and Watched cooldowns always show the block page.", control: [select] }));
+    rows.push(settingRow({ key: "blockAction", label: "When a banned site opens", desc: "Super bans and Watched cooldowns always show the block page.", control: [select] }));
 
     const on = !!state.settings.soundOn;
     const soundBtn = el("button", {
@@ -686,7 +746,7 @@ function renderSettings() {
             else mascot.react("nod");
         }
     });
-    rows.push(settingRow({ label: "Mascot sounds", desc: "Tiny blips when I react. Off by default.", control: [soundBtn] }));
+    rows.push(settingRow({ key: "soundOn", label: "Mascot sounds", desc: "Tiny blips when I react. Off by default.", control: [soundBtn] }));
 
     const still = !!state.settings.mascotStill;
     const stillBtn = el("button", {
@@ -701,7 +761,7 @@ function renderSettings() {
         }
     });
     rows.push(backupRow());
-    rows.push(settingRow({ label: "Wandering", desc: "Whether I hop around on my own when you're idle. I still move when you switch tabs.", control: [stillBtn] }));
+    rows.push(settingRow({ key: "mascotStill", label: "Wandering", desc: "Whether I hop around on my own when you're idle. I still move when you switch tabs.", control: [stillBtn] }));
 
     $("settings").replaceChildren(...rows);
 }
@@ -730,8 +790,10 @@ function selectTab(name, focus = false) {
     };
     const [text, mood] = lines[name] || [null, null];
     // wait a frame so the newly shown panel has its layout before measuring perches
-    // narrow screens stack the Sites columns, so home on the first one (it's in view)
-    const home = name === "sites" && innerWidth < 960 ? "col-ban" : TAB_HOME[name];
+    // Narrow screens stack everything into one column, so a perch above a heading would sit on
+    // the row before it. Home on the window's top edge instead (Sites: the first column).
+    const narrow = innerWidth < 960;
+    const home = !narrow ? TAB_HOME[name] : name === "sites" ? "col-ban" : name === "stats" ? "stats" : "window-top";
     requestAnimationFrame(() => roamer.goTo(home, { say: text, mood }));
 }
 
