@@ -33,6 +33,9 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
     let wanderTimer = null;
     let holdStill = still;
     let busy = false;
+    // Asleep: tucked away on one perch, no wandering, no dragging, no speech bubbles.
+    let asleep = false;
+    let sleepId = null;
 
     // ---------- placement ----------
 
@@ -88,7 +91,7 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
     }
 
     function say(text, ms = 5000, { announce = true } = {}) {
-        if (!text) return;
+        if (!text || asleep) return;
         clearTimeout(bubbleTimer);
         bubble.setAttribute("aria-live", announce ? "polite" : "off");
         bubble.textContent = text;
@@ -162,6 +165,13 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
     }
 
     function goTo(id, { mood: m, say: text, instant = false, announce = true } = {}) {
+        if (asleep) {
+            // every request while asleep means "stay in bed"
+            if (currentId === sleepId && pos.x > -5000) return;
+            id = sleepId;
+            m = null;
+            text = null;
+        }
         let perch = perches.find((p) => p.id === id);
         let target = perch && positionFor(perch);
         if (!target) {
@@ -196,7 +206,7 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
     let drag = null;
 
     el.addEventListener("pointerdown", (e) => {
-        if (e.button !== 0) return;
+        if (e.button !== 0 || asleep) return;
         drag = { startX: e.clientX, startY: e.clientY, offX: e.pageX - pos.x, offY: e.pageY - pos.y, samples: [], moved: false };
         el.setPointerCapture(e.pointerId);
     });
@@ -287,7 +297,7 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
 
     function scheduleWander() {
         clearTimeout(wanderTimer);
-        if (holdStill) return;
+        if (holdStill || asleep) return;
         wanderTimer = setTimeout(wander, 30000 + Math.random() * 30000);
     }
 
@@ -341,6 +351,21 @@ export function createRoamer({ mood = "idle", size = 96, label = "Tab Sniper mas
         setStill(v) {
             holdStill = !!v;
             scheduleWander();
+        },
+        get asleep() { return asleep; },
+        // perchId: where it tucks itself away while asleep
+        setAsleep(v, perchId) {
+            v = !!v;
+            if (perchId) sleepId = perchId;
+            if (v === asleep) return;
+            asleep = v;
+            if (asleep) {
+                hideBubble();
+                clearTimeout(wanderTimer);
+                if (perches.length) goTo(sleepId);
+            } else {
+                scheduleWander();
+            }
         },
         destroy() {
             clearTimeout(wanderTimer);

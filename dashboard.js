@@ -35,7 +35,9 @@ const PERCHES = [
     { id: "col-super", target: "#head-super", mode: "sit", align: 0.85, noWander: true },
     { id: "focus", target: "#panel-focus .side h2", mode: "sit", align: 0.85, noWander: true },
     { id: "stats", target: "#heat", mode: "sit", align: 0.96, noWander: true },
-    { id: "settings", target: ".dash", mode: "sit", align: 0.78, noWander: true }
+    { id: "settings", target: ".dash", mode: "sit", align: 0.78, noWander: true },
+    // napping: tucked behind the window's right edge, out of the way
+    { id: "bed", target: ".dash", mode: "peek", side: "right", align: 0.9, noWander: true }
 ];
 const TAB_HOME = { overview: "overview", sites: "col-super", focus: "focus", stats: "stats", settings: "settings" };
 
@@ -64,6 +66,9 @@ async function refresh() {
     if (!res.ok) return;
     state = res;
     mascot.setMood(state.timer ? "idle" : state.bansActive ? "mischievous" : "sleep");
+    const wasAsleep = roamer.asleep;
+    roamer.setAsleep(!state.bansActive, "bed");
+    if (wasAsleep && state.bansActive && tab) roamer.goTo(homeFor(tab));
     roamer.setStill(!!state.settings.mascotStill);
     renderStatePill();
     renderOverview();
@@ -87,11 +92,16 @@ async function toggleAwake() {
     const r = await send("toggle", { enabled: turningOn });
     if (!r.ok) return corner(r.error, "grudging");
     if (turningOn) {
-        corner("Awake. Try me.", "happy");
+        // wake right away (don't wait for the storage refresh) so it can hop out and talk
+        roamer.setAsleep(false);
+        mascot.setMood("mischievous");
+        roamer.goTo(homeFor(tab), { mood: "happy", say: "Awake. Try me." });
         mascot.react("bounce");
         play("happy");
     } else {
-        corner("Napping. Super bans and Watched sites still count.", "grudging");
+        // off to bed: hides away quietly, no bubble
+        mascot.setMood("sleep");
+        roamer.setAsleep(true, "bed");
     }
 }
 
@@ -793,11 +803,14 @@ function selectTab(name, focus = false) {
     };
     const [text, mood] = lines[name] || [null, null];
     // wait a frame so the newly shown panel has its layout before measuring perches
-    // Narrow screens stack everything into one column, so a perch above a heading would sit on
-    // the row before it. Home on the window's top edge instead (Sites: the first column).
+    requestAnimationFrame(() => roamer.goTo(homeFor(name), { say: text, mood }));
+}
+
+// Narrow screens stack everything into one column, so a perch above a heading would sit on
+// the row before it. Home on the window's top edge instead (Sites: the first column).
+function homeFor(name) {
     const narrow = innerWidth < 960;
-    const home = !narrow ? TAB_HOME[name] : name === "sites" ? "col-ban" : name === "stats" ? "stats" : "window-top";
-    requestAnimationFrame(() => roamer.goTo(home, { say: text, mood }));
+    return !narrow ? TAB_HOME[name] : name === "sites" ? "col-ban" : name === "stats" ? "stats" : "window-top";
 }
 
 TABS.forEach((t) => $(`tab-${t}`).addEventListener("click", () => selectTab(t)));
