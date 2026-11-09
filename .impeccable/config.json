@@ -47,6 +47,18 @@
         "value": "animation: var(--ease-spring)",
         "createdAt": "2026-11-09T01:30:28.742Z",
         "reason": "Claude: literal character motion for the mascot's reactions (squash/bounce), domain-appropriate"
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "bounce",
+        "createdAt": "2026-11-09T01:34:51.858Z",
+        "reason": "Claude: literal character motion for the mascot's reactions (squash/bounce), domain-appropriate"
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "var(--ease-spring)",
+        "createdAt": "2026-11-09T01:34:52.080Z",
+        "reason": "Claude: literal character motion for the mascot's reactions (squash/bounce), domain-appropriate"
       }
     ]
   }

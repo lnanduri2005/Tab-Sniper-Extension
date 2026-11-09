@@ -29,7 +29,8 @@
 .mascot .sparkle { fill: var(--m-cream); stroke: #141218; stroke-width: 1.2; stroke-linejoin: round; }
 
 .mascot .eye { transition: transform 0.18s var(--ease-out); }
-.mascot .eyes.blink .eye { transform: scaleY(0.08); transform-box: fill-box; transform-origin: center; transition-duration: 0.05s; }
+.mascot .blinker { transform-box: fill-box; transform-origin: center; transition: transform 0.09s ease-out; }
+.mascot .eyes.blink .blinker { transform: scaleY(0.1); transition-duration: 0.06s; }
 
 .mascot .zzz { display: none; font: 800 9px var(--font); fill: var(--m-slate); }
 .mascot .sleeping .zzz { display: inline; }

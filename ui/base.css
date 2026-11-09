@@ -178,10 +178,7 @@ input[type="number"].field { border-radius: var(--r-md); width: 84px; text-align
 }
 .tier svg { width: 13px; height: 13px; flex: none; }
 .tier.ban { background: transparent; }
-.tier.watched {
-    background: linear-gradient(90deg, var(--m-slate-light) 0 50%, transparent 50% 100%);
-    color: var(--text);
-}
+.tier.watched { background: var(--m-slate-light); color: var(--m-ink); }
 .tier.super {
     background: var(--m-ink);
     color: var(--m-cream);
@@ -221,6 +218,7 @@ input[type="number"].field { border-radius: var(--r-md); width: 84px; text-align
     padding: 10px 16px;
     font-weight: 700;
     max-width: 34ch;
+    text-wrap: balance;
 }
 .bubble::after {
     content: "";
@@ -239,6 +237,10 @@ input[type="number"].field { border-radius: var(--r-md); width: 84px; text-align
 
 .message:empty { display: none; }
 .message { min-height: 20px; font-size: var(--fs-sm); font-weight: 700; color: var(--note); }
+
+/* ---------- pill toggle (wake/sleep idiom) ---------- */
+
+.btn[aria-pressed="false"] { background: var(--m-cream); color: var(--m-ink); }
 
 /* ---------- switch (used for settings) ---------- */
 

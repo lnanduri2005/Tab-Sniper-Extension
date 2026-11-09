@@ -43,11 +43,23 @@ body { min-height: 100vh; }
     gap: var(--s3);
 }
 .tier-card .mascot { width: 96px; }
-.tier-card > .tier { align-self: flex-start; }
-.tier-card h2 { font-size: var(--fs-lg); }
+.tier-card h2 { font-size: var(--fs-lg); display: flex; align-items: center; gap: var(--s2); }
+.tier-card h2 .tier { margin: 0; }
 .tier-card p { font-size: var(--fs-sm); color: var(--text-muted); }
 .tier-card .cost { font-weight: 800; font-size: var(--fs-sm); color: var(--text); }
-.tier-card.super { border-width: var(--line-heavy); box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--outline); }
+/* heavier card = harder to undo */
+.tier-card.ban { background: transparent; }
+.tier-card.watched { background: var(--m-slate-light); color: var(--m-ink); }
+.tier-card.watched p, .tier-card.watched .cost { color: var(--m-ink); }
+.tier-card.super {
+    background: var(--m-ink);
+    color: var(--m-cream);
+    border-color: var(--m-ink);
+    box-shadow: 0 0 0 3px var(--m-cream), 0 0 0 6px var(--m-ink);
+}
+.tier-card.super p { color: #d8d2e4; }
+.tier-card.super .cost { color: var(--m-cream); }
+.tier-card.super .tier.super { box-shadow: 0 0 0 2px var(--m-cream); }
 
 .picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: var(--s3); }
 .pick { position: relative; }

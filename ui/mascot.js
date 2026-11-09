@@ -92,8 +92,8 @@ function drawFace(mood) {
             <ellipse cx="89" cy="71" rx="${blushR[0]}" ry="${blushR[1]}"/>
         </g>
         <g class="eyes">
-            <g class="eye">${eye(...EYE_L)}</g>
-            <g class="eye">${eye(...EYE_R)}</g>
+            <g class="eye"><g class="blinker">${eye(...EYE_L)}</g></g>
+            <g class="eye"><g class="blinker">${eye(...EYE_R)}</g></g>
         </g>
         ${brows}
         <path class="mouth ${r.mouth === "open" || r.mouth === "o" ? "filled" : "stroke"}" transform="translate(${MOUTH[0]} ${MOUTH[1]})" d="${MOUTHS[r.mouth]}"/>
@@ -144,13 +144,20 @@ export function createMascot({ mood = "idle", variant = "full", label = "Tab Sni
         current = m;
         face.innerHTML = drawFace(m);
         el.dataset.mood = m;
+        if (!MOODS[m]?.look) setEyeOffset(...(MOODS[m]?.track ? eyeOffset : [0, 0]));
         svg.classList.toggle("sleeping", !!MOODS[m]?.zzz);
         const look = MOODS[m]?.look;
         if (look) setEyeOffset(look[0], look[1]);
     }
 
+    // Tracking lives on .eye (CSS translate); blinking lives on the inner .blinker (CSS scaleY).
+    // Keeping them on separate elements stops one transform from overwriting the other.
+    let eyeOffset = [0, 0];
     function setEyeOffset(dx, dy) {
-        face.querySelectorAll(".eye").forEach((g) => g.setAttribute("transform", `translate(${dx.toFixed(2)} ${dy.toFixed(2)})`));
+        eyeOffset = [dx, dy];
+        face.querySelectorAll(".eye").forEach((g) => {
+            g.style.transform = `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px)`;
+        });
     }
 
     function setMood(m) {
@@ -180,7 +187,7 @@ export function createMascot({ mood = "idle", variant = "full", label = "Tab Sni
             const eyes = face.querySelector(".eyes");
             if (eyes && ["round", "wide", "half"].includes(MOODS[current]?.eyes)) {
                 eyes.classList.add("blink");
-                setTimeout(() => eyes.classList.remove("blink"), 140);
+                setTimeout(() => eyes.classList.remove("blink"), 110);
             }
             scheduleBlink();
         }, 2600 + Math.random() * 3600);

@@ -3,7 +3,7 @@ import { createMascot } from "./ui/mascot.js";
 import { ICONS } from "./ui/icons.js";
 import { loadSoundSetting, play } from "./ui/sound.js";
 import { el, $ } from "./ui/dom.js";
-import { tierChip } from "./ui/tiers.js";
+import { tierIcon } from "./ui/tiers.js";
 
 const STEPS = ["Hello", "Three kinds of block", "Pick your weak spots", "All set"];
 let step = 0;
@@ -39,7 +39,7 @@ function stepHello() {
 
 function tierCard(tier, mood, title, body, cost) {
     const m = createMascot({ mood, interactive: false, label: `${title} mascot` });
-    return el("div", { class: `tier-card ${tier}` }, [m.el, tierChip(tier), el("h2", { text: title }), el("p", { text: body }), el("p", { class: "cost", text: cost })]);
+    return el("div", { class: `tier-card ${tier}` }, [m.el, el("h2", {}, [tierIcon(tier), title]), el("p", { text: body }), el("p", { class: "cost", text: cost })]);
 }
 
 function stepTiers() {

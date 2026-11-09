@@ -12,6 +12,13 @@ body { background: var(--m-frame); }
 .popup .titlebar { border-radius: 0; margin: 0 -7px 7px; height: 46px; }
 .popup .screen { display: flex; flex-direction: column; overflow: hidden; }
 
+/* asleep: dots dim, zzz floats in the title bar */
+.popup .zzz { display: none; align-self: center; font-weight: 800; font-size: var(--fs-sm); color: var(--m-slate); letter-spacing: 1px; margin: 0 var(--s1) 0 -2px; }
+.popup .zzz span { font-size: var(--fs-md); }
+body.asleep .popup .zzz { display: inline; animation: zzz-pop 2.4s ease-in-out infinite; }
+body.asleep .titlebar .dot { filter: saturate(0.3) brightness(0.85); }
+@keyframes zzz-pop { 50% { transform: translateY(-2px); opacity: 0.6; } }
+
 .title-btn {
     margin-left: auto;
     align-self: center;

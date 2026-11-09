@@ -416,7 +416,7 @@ function statsLine() {
 function renderStats() {
     const s = state.stats;
     $("stats-lede").textContent = s.total30
-        ? `${tries(s.total30)} at blocked sites in the last 30 days. Darker days had more.`
+        ? `${tries(s.total30)} at blocked sites in the last 30 days.`
         : "No attempts in the last 30 days. Your pattern shows up here as you go.";
     const max = Math.max(...s.series.map((d) => d.attempts), 1);
     $("heat").setAttribute("aria-label", `Attempts per day for the last 30 days, busiest day ${max}.`);
@@ -427,7 +427,15 @@ function renderStats() {
             return el("div", { class: `cell ${i === s.series.length - 1 ? "today" : ""}`, "data-level": String(level(d.attempts, max)), title: label });
         })
     );
-    $("heat-legend").replaceChildren(el("span", { text: "30 days ago" }), el("span", { text: "Today" }));
+    $("heat-legend").replaceChildren(
+        el("span", { text: "30 days ago" }),
+        el("span", { class: "scale", "aria-hidden": "true" }, [
+            el("span", { text: "Fewer" }),
+            ...[0, 1, 2, 3, 4].map((lv) => el("span", { class: "cell", "data-level": String(lv) })),
+            el("span", { text: "More" })
+        ]),
+        el("span", { text: "Today" })
+    );
 
     $("top-sites").replaceChildren(
         ...(s.topSites.length
@@ -505,15 +513,21 @@ function renderSettings() {
     select.addEventListener("change", () => saveSetting("blockAction", select.value));
     rows.push(settingRow({ label: "When a banned site opens", desc: "Super bans and Watched cooldowns always show the block page.", control: [select] }));
 
-    const sw = el("label", { class: "switch" }, [el("input", { type: "checkbox", "aria-label": "Mascot sounds" }), el("span", { class: "track" })]);
-    const box = sw.querySelector("input");
-    box.checked = !!state.settings.soundOn;
-    box.addEventListener("change", async () => {
-        await saveSetting("soundOn", box.checked);
-        setSoundEnabled(box.checked);
-        play("happy");
+    const on = !!state.settings.soundOn;
+    const soundBtn = el("button", {
+        class: "btn small",
+        "aria-pressed": String(on),
+        "aria-label": "Mascot sounds",
+        html: `${ICONS.sound}<span>${on ? "Blips on" : "Quiet"}</span>`,
+        onclick: async () => {
+            const next = !on;
+            await saveSetting("soundOn", next);
+            setSoundEnabled(next);
+            if (next) play("happy");
+            else mascot.react("nod");
+        }
     });
-    rows.push(settingRow({ label: "Mascot sounds", desc: "Tiny blips when I react. Off by default.", control: [sw] }));
+    rows.push(settingRow({ label: "Mascot sounds", desc: "Tiny blips when I react. Off by default.", control: [soundBtn] }));
 
     $("settings").replaceChildren(...rows);
 }

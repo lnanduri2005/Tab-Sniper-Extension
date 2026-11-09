@@ -30,7 +30,7 @@ async function refresh() {
 
 async function loadHere() {
     try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
         hereDomain = tab?.url ? extractDomain(tab.url) : null;
     } catch {
         hereDomain = null;
@@ -88,6 +88,7 @@ function renderLine(force = false) {
 
 function renderWake() {
     const btn = $("wake-btn");
+    document.body.classList.toggle("asleep", !state.bansActive);
     btn.disabled = !!state.timer;
     btn.classList.toggle("asleep", !state.bansActive);
     if (state.timer) btn.innerHTML = `${ICONS.lock}<span>Locked during focus</span>`;
