@@ -14,6 +14,7 @@
             <div class="title">Tab Sniper</div>
         </div>
         <div class="toggle-wrapper">
+            <button class="btn-small" id="dashboard-btn" title="Open dashboard">Dashboard</button>
             <span class="toggle-label" id="status-text">OFF</span>
             <label class="switch">
                 <input type="checkbox" id="toggle-switch">
@@ -24,31 +25,23 @@
 
     <div class="tabs">
         <button class="tab active" data-tab="focus">Focus</button>
-        <button class="tab" data-tab="sites">Blocked Sites</button>
+        <button class="tab" data-tab="sites">Sites</button>
         <button class="tab" data-tab="stats">Stats</button>
         <button class="tab" data-tab="history">History</button>
     </div>
 
     <div class="tab-content active" id="focus-tab">
         <div id="timer-display" class="timer-display">00:00</div>
-        <div class="timer-input-group">
-            <input type="number" id="timer-minutes" min="1" max="120" value="25">
+        <div class="timer-input-group" id="timer-input-group">
+            <input type="number" id="timer-minutes" min="1" max="240" value="25">
             <span>minutes</span>
         </div>
 
         <button class="btn-primary" id="start-timer-btn">Start Focus Session</button>
         <button class="btn-primary" id="save-focus-btn" style="background: var(--accent); margin-top: 8px;">Save as Preset</button>
+        <button class="btn-primary" id="end-early-btn" style="background: var(--accent); margin-top: 8px;" hidden>End early (challenge)</button>
 
         <div class="message" id="timer-message"></div>
-
-        <div class="section" style="margin-top: 24px;">
-            <div class="section-title">Sites to Block</div>
-            <div class="input-group">
-                <input type="text" id="url-input-focus" placeholder="reddit.com">
-                <button class="btn-secondary" id="add-url-btn-focus">Add</button>
-            </div>
-            <ul id="url-list-focus" class="list" style="margin-top: 12px; max-height: 150px; overflow-y: auto;"></ul>
-        </div>
 
         <div class="section" style="margin-top: 20px;">
             <div class="section-title">Quick Start Presets</div>
@@ -58,17 +51,23 @@
 
     <div class="tab-content" id="sites-tab">
         <div class="section">
-            <div class="section-title">Add Site to Block</div>
+            <div class="section-title">Bans</div>
             <div class="input-group">
                 <input type="text" id="url-input" placeholder="reddit.com">
                 <button class="btn-secondary" id="add-url-btn">Add</button>
             </div>
+            <ul id="url-list" class="list" style="margin-top: 12px;"></ul>
         </div>
 
         <div class="section">
-            <div class="section-title">Currently Blocked</div>
-            <ul id="url-list" class="list"></ul>
+            <div class="section-title">Super bans (24/7)</div>
+            <div class="input-group">
+                <input type="text" id="super-input" placeholder="instagram.com">
+                <button class="btn-secondary" id="add-super-btn">Add</button>
+            </div>
+            <ul id="super-list" class="list" style="margin-top: 12px;"></ul>
         </div>
+        <div class="message" id="sites-message"></div>
     </div>
 
     <div class="tab-content" id="stats-tab">
@@ -101,6 +100,6 @@
         </div>
     </div>
 
-    <script src="popup.js"></script>
+    <script type="module" src="popup.js"></script>
 </body>
 </html>

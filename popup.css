@@ -479,3 +479,7 @@ input:checked + .slider:before {
     gap: 6px;
     margin-top: 10px;
 }
+
+[hidden] {
+    display: none !important;
+}
