@@ -1,0 +1,91 @@
+/* Mascot drawing. Colors are the mascot's own and do not change with theme. */
+
+.mascot { display: inline-block; line-height: 0; }
+.mascot-svg { width: 100%; height: auto; overflow: visible; display: block; }
+.mascot.pokeable { cursor: pointer; border-radius: 18%; }
+.mascot-face .mascot-svg { overflow: hidden; border-radius: 12% / 22%; }
+.mascot-face .frame-parts { display: none; }
+.mascot-face .screen { stroke: none; }
+.mascot.pokeable:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+
+.mascot .frame { fill: var(--m-frame); }
+.mascot .titlebar { fill: var(--m-cream); }
+.mascot .outline { fill: none; stroke: var(--m-ink); stroke-width: 4; }
+.mascot .screen { fill: var(--m-screen); stroke: var(--m-ink); stroke-width: 3.2; }
+.mascot .dot { stroke: var(--m-ink); stroke-width: 2.6; }
+.mascot .dot-a { fill: var(--m-blush); }
+.mascot .dot-b { fill: var(--m-slate); }
+
+.mascot .ink { fill: #141218; }
+.mascot .shine { fill: var(--m-white); }
+.mascot .lid { fill: var(--m-screen); }
+.mascot .stroke { fill: none; stroke: #141218; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.mascot .stroke.thick { stroke-width: 3.2; }
+.mascot .frame-parts .stroke { stroke: var(--m-ink); stroke-width: 3; }
+.mascot .mouth.filled { fill: #141218; stroke: #141218; stroke-width: 1.5; stroke-linejoin: round; }
+.mascot .blush ellipse { fill: var(--m-blush); opacity: 0.92; }
+.mascot .sweat { fill: var(--m-slate-light); stroke: #141218; stroke-width: 1.4; }
+.mascot .anger { fill: none; stroke: var(--m-blush); stroke-width: 2.6; stroke-linecap: round; }
+.mascot .sparkle { fill: var(--m-cream); stroke: #141218; stroke-width: 1.2; stroke-linejoin: round; }
+
+.mascot .eye { transition: transform 0.18s var(--ease-out); }
+.mascot .blinker { transform-box: fill-box; transform-origin: center; transition: transform 0.09s ease-out; }
+.mascot .eyes.blink .blinker { transform: scaleY(0.1); transition-duration: 0.06s; }
+
+.mascot .zzz { display: none; font: 800 9px var(--font); fill: var(--m-slate); }
+.mascot .sleeping .zzz { display: inline; }
+.mascot .sleeping .zzz text { animation: zzz 2.4s ease-in-out infinite; }
+.mascot .sleeping .zzz text:nth-child(2) { animation-delay: 0.4s; }
+.mascot .sleeping .zzz text:nth-child(3) { animation-delay: 0.8s; }
+@keyframes zzz { 0%, 100% { opacity: 0.35; transform: translateY(1px); } 50% { opacity: 1; transform: translateY(-2px); } }
+
+/* body: breathing + one-shot reactions */
+.mascot .body { transform-box: fill-box; transform-origin: 50% 100%; animation: breathe 4.2s ease-in-out infinite; }
+.mascot .sleeping .body { animation-duration: 6s; }
+@keyframes breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.012, 0.985); } }
+
+.mascot-svg.r-bounce .body { animation: bounce 0.6s var(--ease-out); }
+.mascot-svg.r-squash .body { animation: squash 0.5s var(--ease-spring); }
+.mascot-svg.r-hop .body { animation: hop 0.55s var(--ease-out); }
+.mascot-svg.r-shake .body { animation: tilt-shake 0.5s ease-in-out; }
+.mascot-svg.r-nod .body { animation: nod 0.6s ease-in-out; }
+.mascot-svg.r-tilt .body { animation: tilt 1.2s var(--ease-out); }
+.mascot-svg.r-dots .dot { animation: dots 0.5s ease-in-out 2; }
+
+@keyframes bounce {
+    0% { transform: translateY(0) scale(1, 1); }
+    25% { transform: translateY(0) scale(1.08, 0.9); }
+    55% { transform: translateY(-14%) scale(0.95, 1.06); }
+    80% { transform: translateY(0) scale(1.05, 0.95); }
+    100% { transform: translateY(0) scale(1, 1); }
+}
+@keyframes squash {
+    0% { transform: scale(1, 1); }
+    30% { transform: scale(1.14, 0.84); }
+    100% { transform: scale(1, 1); }
+}
+@keyframes hop {
+    0% { transform: translateY(0); }
+    40% { transform: translateY(-10%) rotate(-3deg); }
+    100% { transform: translateY(0) rotate(0); }
+}
+@keyframes tilt-shake {
+    20% { transform: rotate(-6deg); }
+    40% { transform: rotate(5deg); }
+    60% { transform: rotate(-4deg); }
+    80% { transform: rotate(2deg); }
+}
+@keyframes nod {
+    30% { transform: translateY(3%) scale(1, 0.96); }
+    60% { transform: translateY(0); }
+}
+@keyframes tilt {
+    30%, 70% { transform: rotate(-8deg); }
+    100% { transform: rotate(0); }
+}
+@keyframes dots { 50% { opacity: 0.2; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .mascot .body, .mascot .sleeping .zzz text { animation: none !important; }
+    .mascot .eye { transition: none; }
+}

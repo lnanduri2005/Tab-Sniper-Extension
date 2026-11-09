@@ -1,106 +1,91 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
+    <title>Tab Sniper</title>
+    <link rel="stylesheet" href="ui/tokens.css">
+    <link rel="stylesheet" href="ui/base.css">
+    <link rel="stylesheet" href="ui/mascot.css">
     <link rel="stylesheet" href="popup.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="header">
-        <div class="header-left">
-            <img src="icon_mischiveous.png" class="logo" id="app-logo" alt="Tab Sniper Logo">
-            <div class="title">Tab Sniper</div>
-        </div>
-        <div class="toggle-wrapper">
-            <span class="toggle-label" id="status-text">OFF</span>
-            <label class="switch">
-                <input type="checkbox" id="toggle-switch">
-                <span class="slider"></span>
-            </label>
-        </div>
-    </div>
-
-    <div class="tabs">
-        <button class="tab active" data-tab="focus">Focus</button>
-        <button class="tab" data-tab="sites">Blocked Sites</button>
-        <button class="tab" data-tab="stats">Stats</button>
-        <button class="tab" data-tab="history">History</button>
-    </div>
-
-    <div class="tab-content active" id="focus-tab">
-        <div id="timer-display" class="timer-display">00:00</div>
-        <div class="timer-input-group">
-            <input type="number" id="timer-minutes" min="1" max="120" value="25">
-            <span>minutes</span>
-        </div>
-
-        <button class="btn-primary" id="start-timer-btn">Start Focus Session</button>
-        <button class="btn-primary" id="save-focus-btn" style="background: var(--accent); margin-top: 8px;">Save as Preset</button>
-
-        <div class="message" id="timer-message"></div>
-
-        <div class="section" style="margin-top: 24px;">
-            <div class="section-title">Sites to Block</div>
-            <div class="input-group">
-                <input type="text" id="url-input-focus" placeholder="reddit.com">
-                <button class="btn-secondary" id="add-url-btn-focus">Add</button>
+    <div class="window popup">
+        <div class="titlebar">
+            <div class="dots" aria-hidden="true"><span class="dot pink"></span><span class="dot slate"></span></div>
+            <span class="zzz" aria-hidden="true">z<span>Z</span>z</span>
+            <div class="tabs" role="tablist" aria-label="Tab Sniper">
+                <button class="tab" role="tab" id="tab-home" aria-controls="panel-home" aria-selected="true">Home</button>
+                <button class="tab" role="tab" id="tab-focus" aria-controls="panel-focus" aria-selected="false">Focus</button>
+                <button class="tab" role="tab" id="tab-sites" aria-controls="panel-sites" aria-selected="false">Sites</button>
             </div>
-            <ul id="url-list-focus" class="list" style="margin-top: 12px; max-height: 150px; overflow-y: auto;"></ul>
+            <button class="title-btn" id="dashboard-btn" title="Open dashboard" aria-label="Open dashboard"></button>
         </div>
 
-        <div class="section" style="margin-top: 20px;">
-            <div class="section-title">Quick Start Presets</div>
-            <div id="preset-list" class="list"></div>
-        </div>
-    </div>
-
-    <div class="tab-content" id="sites-tab">
-        <div class="section">
-            <div class="section-title">Add Site to Block</div>
-            <div class="input-group">
-                <input type="text" id="url-input" placeholder="reddit.com">
-                <button class="btn-secondary" id="add-url-btn">Add</button>
+        <div class="screen">
+            <div class="stage" id="stage">
+                <div class="face-slot" id="face-slot"></div>
+                <p class="line" id="line" aria-live="polite"></p>
             </div>
-        </div>
 
-        <div class="section">
-            <div class="section-title">Currently Blocked</div>
-            <ul id="url-list" class="list"></ul>
+            <section class="panel" id="panel-home" role="tabpanel" aria-labelledby="tab-home">
+                <button class="btn block wake" id="wake-btn"></button>
+
+                <div class="here" id="here" hidden>
+                    <div class="here-head">
+                        <span class="muted small">This tab</span>
+                        <strong class="here-domain" id="here-domain"></strong>
+                        <span id="here-status"></span>
+                    </div>
+                    <div class="here-actions" id="here-actions">
+                        <button class="btn small cream" data-tier="ban">Ban</button>
+                        <button class="btn small slate" data-tier="watched">Watch</button>
+                        <button class="btn small" data-tier="super">Super ban</button>
+                    </div>
+                </div>
+
+                <h2 class="section-title">Today</h2>
+                <ul class="rows" id="today"></ul>
+            </section>
+
+            <section class="panel" id="panel-focus" role="tabpanel" aria-labelledby="tab-focus" hidden>
+                <div class="clock" id="clock">25:00</div>
+                <div class="strip" aria-hidden="true"><div class="strip-fill" id="strip-fill"></div></div>
+
+                <div id="focus-setup">
+                    <div class="chips" id="duration-chips" role="radiogroup" aria-label="Focus length"></div>
+                    <div class="custom-row">
+                        <label for="custom-minutes" class="muted small">Custom</label>
+                        <input class="field" type="number" id="custom-minutes" min="1" max="240" value="25">
+                        <span class="muted small">min</span>
+                        <button class="btn small ghost" id="save-preset">Save as preset</button>
+                    </div>
+                    <button class="btn block" id="start-focus"></button>
+                    <p class="hint muted small">Bans stay on until the timer ends.</p>
+                </div>
+
+                <div id="focus-running" hidden>
+                    <button class="btn block ghost" id="end-early"></button>
+                    <p class="hint muted small">Ending early takes a short challenge.</p>
+                </div>
+                <p class="message" id="focus-message"></p>
+            </section>
+
+            <section class="panel" id="panel-sites" role="tabpanel" aria-labelledby="tab-sites" hidden>
+                <form class="add" id="add-form">
+                    <input class="field" id="add-input" placeholder="reddit.com" aria-label="Website" autocomplete="off">
+                    <div class="seg" role="radiogroup" aria-label="Type">
+                        <label><input type="radio" name="tier" value="ban" checked><span>Ban</span></label>
+                        <label><input type="radio" name="tier" value="watched"><span>Watch</span></label>
+                        <label><input type="radio" name="tier" value="super"><span>Super</span></label>
+                    </div>
+                    <button class="btn small" type="submit" id="add-btn">Add</button>
+                </form>
+                <p class="message" id="sites-message"></p>
+                <div id="site-groups"></div>
+                <button class="link-btn" id="manage-btn">Manage everything in the dashboard</button>
+            </section>
         </div>
     </div>
-
-    <div class="tab-content" id="stats-tab">
-        <div class="stat-grid">
-            <div class="stat-card">
-                <div class="stat-value" id="total-sessions">0</div>
-                <div class="stat-label">Sessions This Week</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="total-minutes">0</div>
-                <div class="stat-label">Minutes Focused</div>
-            </div>
-        </div>
-
-        <div class="chart-container">
-            <div class="chart-title">Focus Time This Week</div>
-            <div class="bar-chart" id="weekly-chart"></div>
-        </div>
-
-        <div class="chart-container">
-            <div class="chart-title">Most Blocked Sites</div>
-            <div class="blocked-sites-list" id="blocked-stats"></div>
-        </div>
-    </div>
-
-    <div class="tab-content" id="history-tab">
-        <div class="section">
-            <div class="section-title">Recent Focus Sessions</div>
-            <div id="history-list" class="list"></div>
-        </div>
-    </div>
-
-    <script src="popup.js"></script>
+    <script type="module" src="popup.js"></script>
 </body>
 </html>

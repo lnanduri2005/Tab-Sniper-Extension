@@ -1,41 +1,59 @@
 {
   "manifest_version": 3,
   "name": "Tab Sniper",
-<<<<<<< HEAD
-  "version": "1.0.0",
-  "description": "Boost productivity by blocking distracting websites during focus sessions. Features a customizable timer and website blocker.",
-  "permissions": ["storage", "tabs", "webNavigation", "notifications"],
-=======
-  "version": "1.0",
-  "description": "Closes tabs with specified URLs automatically.",
-  "permissions": ["storage", "tabs", "webNavigation"],
->>>>>>> e0f7080 (first commit)
+  "version": "2.0.0",
+  "description": "Stop doomscrolling. Ban distracting sites, super-ban the worst ones, cut off endless Shorts and Reels, and run focus sessions.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "webNavigation",
+    "notifications",
+    "alarms",
+    "contextMenus",
+    "declarativeNetRequest",
+    "scripting",
+    "idle"
+  ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-<<<<<<< HEAD
       "16": "icon_mischiveous.png",
       "48": "icon_mischiveous.png",
       "128": "icon_mischiveous.png"
     }
   },
+  "options_page": "dashboard.html",
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "blocked.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    },
+    {
+      "resources": [
+        "fonts/mplus-rounded-1c-800.woff2"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
   "icons": {
     "16": "icon_mischiveous.png",
     "48": "icon_mischiveous.png",
     "128": "icon_mischiveous.png"
   },
   "author": "Likitha Nanduri, Abhigna Nimmagadda, and Parikshith Venkataraghavan",
-  "homepage_url": "https://github.com/yourusername/tab-sniper",
-  "minimum_chrome_version": "88"
-=======
-      "16": "icon_sleep.png",
-      "48": "icon_sleep.png",
-      "128": "icon_sleep.png"
-    }
-  }
->>>>>>> e0f7080 (first commit)
+  "homepage_url": "https://github.com/lnanduri2005/Tab-Sniper-Extension",
+  "minimum_chrome_version": "102"
 }

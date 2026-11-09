@@ -1,515 +1,429 @@
-document.addEventListener("DOMContentLoaded", () => {
-    let enabled = false;
-    let timerActive = false;
-    let timerEndTime = 0;
-    let focusDurationMinutes = 0;
-    let countdownInterval = null;
-    let presets = [];
-    let history = [];
-    let stats = {
-        dailyMinutes: [0, 0, 0, 0, 0, 0, 0],
-        blockedSites: {}
-    };
-    let blockedUrls = [];
-
-    const toggleSwitch = document.getElementById("toggle-switch");
-    const statusText = document.getElementById("status-text");
-    const timerDisplay = document.getElementById("timer-display");
-    const timerMinutes = document.getElementById("timer-minutes");
-    const startTimerBtn = document.getElementById("start-timer-btn");
-    const saveFocusBtn = document.getElementById("save-focus-btn");
-    const timerMessage = document.getElementById("timer-message");
-    const urlInput = document.getElementById("url-input");
-    const addUrlBtn = document.getElementById("add-url-btn");
-    const urlList = document.getElementById("url-list");
-    const urlInputFocus = document.getElementById("url-input-focus");
-    const addUrlBtnFocus = document.getElementById("add-url-btn-focus");
-    const urlListFocus = document.getElementById("url-list-focus");
-    const presetList = document.getElementById("preset-list");
-    const appLogo = document.getElementById("app-logo");
-    const weeklyChart = document.getElementById("weekly-chart");
-    const blockedStats = document.getElementById("blocked-stats");
-    const historyList = document.getElementById("history-list");
-
-    chrome.storage.onChanged.addListener((changes, area) => {
-        if (area !== "sync") return;
-        if (
-            changes.history ||
-            changes.stats ||
-            changes.enabled ||
-            changes.timerActive ||
-            changes.timerEndTime ||
-            changes.timerDurationMinutes ||
-            changes.presets ||
-            changes.blockedUrls
-        ) {
-            loadFromStorage();
-        }
-    });
-
-    document.querySelectorAll(".tab").forEach((tab) => {
-        tab.addEventListener("click", () => {
-            document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-            document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
-
-            tab.classList.add("active");
-            document.getElementById(`${tab.dataset.tab}-tab`).classList.add("active");
-
-            if (tab.dataset.tab === "stats") {
-                renderStats();
-            }
-        });
-    });
-
-    init();
-
-    function init() {
-        loadFromStorage();
-
-        toggleSwitch.addEventListener("change", handleToggle);
-        startTimerBtn.addEventListener("click", () => startFocusSession());
-        saveFocusBtn.addEventListener("click", saveCurrentAsPreset);
-        addUrlBtn.addEventListener("click", addBlockedSite);
-        addUrlBtnFocus.addEventListener("click", addBlockedSiteFocus);
-        urlInput.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") addBlockedSite();
-        });
-        urlInputFocus.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") addBlockedSiteFocus();
-        });
-        timerMinutes.addEventListener("input", updateTimerPreview);
-
-        updateTimerPreview();
-    }
-
-    function loadFromStorage() {
-        chrome.runtime.sendMessage({ action: "getTimerState" }, (response) => {
-            if (!response) return;
-
-            enabled = response.enabled;
-            timerActive = response.timerActive;
-            timerEndTime = response.timerEndTime;
-            focusDurationMinutes = response.timerDurationMinutes || 0;
-
-            toggleSwitch.checked = enabled;
-            statusText.textContent = enabled ? "ON" : "OFF";
-            updateIcon(enabled);
-
-            if (timerActive && response.timerEndTime > response.currentTime) {
-                startTimerCountdown(response.timerEndTime);
-            } else {
-                timerActive = false;
-                updateTimerPreview();
-            }
-        });
-
-        chrome.storage.sync.get(["blockedUrls", "presets", "history", "stats"], (data) => {
-            blockedUrls = data.blockedUrls || [];
-            presets = data.presets || [];
-            history = data.history || [];
-            stats = data.stats || {
-                dailyMinutes: [0, 0, 0, 0, 0, 0, 0],
-                blockedSites: {}
-            };
-
-            if (!Array.isArray(stats.dailyMinutes) || stats.dailyMinutes.length !== 7) {
-                stats.dailyMinutes = [0, 0, 0, 0, 0, 0, 0];
-            }
-            if (!stats.blockedSites) stats.blockedSites = {};
-
-            renderUrlList(blockedUrls);
-            renderUrlListFocus(blockedUrls);
-            renderPresets();
-            renderHistory();
-        });
-    }
-
-    function handleToggle() {
-        if (timerActive) {
-            toggleSwitch.checked = true;
-            return;
-        }
-
-        enabled = toggleSwitch.checked;
-        statusText.textContent = enabled ? "ON" : "OFF";
-        updateIcon(enabled);
-
-        chrome.runtime.sendMessage({
-            action: "toggle",
-            enabled: enabled
-        });
-    }
-
-    function startFocusSession(presetMinutes = null, presetName = null) {
-        const minutes = presetMinutes || parseInt(timerMinutes.value);
-        if (isNaN(minutes) || minutes < 1) {
-            timerMessage.textContent = "Enter valid time";
-            return;
-        }
-
-        chrome.runtime.sendMessage(
-            {
-                action: "startTimer",
-                minutes: minutes,
-                source: presetName ? `preset:${presetName}` : "popup"
-            },
-            (response) => {
-                if (!response || !response.success) {
-                    timerMessage.textContent = "Failed to start";
-                    return;
-                }
-
-                timerActive = true;
-                timerEndTime = response.timerEndTime;
-                focusDurationMinutes = response.timerDurationMinutes || minutes;
-                enabled = true;
-
-                toggleSwitch.checked = true;
-                statusText.textContent = "ON";
-                updateIcon(true);
-
-                startTimerCountdown(timerEndTime);
-                loadFromStorage();
-
-                timerMessage.textContent = "Focus mode activated!";
-                setTimeout(() => {
-                    timerMessage.textContent = "";
-                }, 2000);
-            }
-        );
-    }
-
-    function startTimerCountdown(endTime) {
-        if (countdownInterval) clearInterval(countdownInterval);
-
-        updateCountdown(endTime);
-
-        countdownInterval = setInterval(() => {
-            const stillActive = updateCountdown(endTime);
-            if (!stillActive) {
-                clearInterval(countdownInterval);
-                countdownInterval = null;
-                onTimerComplete();
-            }
-        }, 1000);
-    }
-
-    function updateCountdown(endTime) {
-        const now = Date.now();
-        const timeLeft = endTime - now;
-
-        if (timeLeft <= 0) {
-            timerDisplay.textContent = "00:00";
-            return false;
-        }
-
-        const minutes = Math.floor(timeLeft / 60000);
-        const seconds = Math.floor((timeLeft % 60000) / 1000);
-        timerDisplay.textContent = `${String(minutes).padStart(2, "0")}:${String(
-            seconds
-        ).padStart(2, "0")}`;
-
-        return true;
-    }
-
-    function onTimerComplete() {
-        timerActive = false;
-        enabled = false;
-
-        toggleSwitch.checked = false;
-        statusText.textContent = "OFF";
-        updateIcon(false);
-
-        chrome.runtime.sendMessage(
-            {
-                action: "expireTimer",
-                completed: true,
-                reason: "popup-countdown"
-            },
-            () => {
-                loadFromStorage();
-            }
-        );
-
-        updateTimerPreview();
-        timerMessage.textContent = "Session complete!";
-        setTimeout(() => {
-            timerMessage.textContent = "";
-        }, 3000);
-    }
-
-    function updateTimerPreview() {
-        if (!timerActive) {
-            const minutes = parseInt(timerMinutes.value) || 0;
-            timerDisplay.textContent = `${String(minutes).padStart(2, "0")}:00`;
-        }
-    }
-
-    function saveCurrentAsPreset() {
-        const minutes = parseInt(timerMinutes.value);
-        if (isNaN(minutes) || minutes < 1) return;
-
-        const name = (prompt("Name this preset:") || "").trim();
-        if (!name) return;
-
-        const preset = {
-            id: Date.now(),
-            name,
-            minutes
-        };
-
-        presets.push(preset);
-        chrome.storage.sync.set({ presets });
-        renderPresets();
-
-        timerMessage.textContent = `Saved "${name}"`;
-        setTimeout(() => {
-            timerMessage.textContent = "";
-        }, 2000);
-    }
-
-    function renderPresets() {
-        presetList.innerHTML = "";
-
-        if (!presets.length) {
-            presetList.innerHTML = '<div class="empty-state">No presets saved yet</div>';
-            return;
-        }
-
-        presets.forEach((preset) => {
-            const div = document.createElement("div");
-            div.className = "preset-item";
-            div.innerHTML = `
-                <div class="preset-header">
-                    <div>
-                        <div class="preset-name">${preset.name}</div>
-                        <div class="preset-duration">${preset.minutes} minutes</div>
-                    </div>
-                </div>
-                <div class="preset-actions">
-                    <button class="btn-small" data-action="start">Start</button>
-                    <button class="btn-small danger" data-action="delete">Delete</button>
-                </div>
-            `;
-
-            div.querySelector('[data-action="start"]').addEventListener("click", () => {
-                timerMinutes.value = preset.minutes;
-                updateTimerPreview();
-                startFocusSession(preset.minutes, preset.name);
-            });
-
-            div.querySelector('[data-action="delete"]').addEventListener("click", () => {
-                presets = presets.filter((p) => p.id !== preset.id);
-                chrome.storage.sync.set({ presets });
-                renderPresets();
-            });
-
-            presetList.appendChild(div);
-        });
-    }
-
-    function addBlockedSite() {
-        const url = urlInput.value.trim();
-        if (!url) return;
-
-        const domain = normalizeDomain(url);
-        if (!domain) return;
-
-        chrome.storage.sync.get("blockedUrls", (data) => {
-            const urls = data.blockedUrls || [];
-            if (!urls.includes(domain)) {
-                urls.push(domain);
-                blockedUrls = urls;
-                chrome.runtime.sendMessage({ action: "updateUrls", urls });
-                chrome.storage.sync.set({ blockedUrls: urls });
-                renderUrlList(urls);
-                renderUrlListFocus(urls);
-                urlInput.value = "";
-            }
-        });
-    }
-
-    function addBlockedSiteFocus() {
-        const url = urlInputFocus.value.trim();
-        if (!url) return;
-
-        const domain = normalizeDomain(url);
-        if (!domain) return;
-
-        chrome.storage.sync.get("blockedUrls", (data) => {
-            const urls = data.blockedUrls || [];
-            if (!urls.includes(domain)) {
-                urls.push(domain);
-                blockedUrls = urls;
-                chrome.runtime.sendMessage({ action: "updateUrls", urls });
-                chrome.storage.sync.set({ blockedUrls: urls });
-                renderUrlList(urls);
-                renderUrlListFocus(urls);
-                urlInputFocus.value = "";
-            }
-        });
-    }
-
-    function renderUrlList(urls) {
-        urlList.innerHTML = "";
-
-        if (!urls.length) {
-            urlList.innerHTML = '<div class="empty-state">No sites blocked yet</div>';
-            return;
-        }
-
-        urls.forEach((url) => {
-            const li = document.createElement("li");
-            li.className = "list-item";
-            const removeDisabled = enabled || timerActive ? "disabled" : "";
-            li.innerHTML = `
-                <span class="list-item-text">${url}</span>
-                <div class="list-item-actions">
-                    <button class="btn-small danger" ${removeDisabled} data-url="${url}">Remove</button>
-                </div>
-            `;
-
-            const btn = li.querySelector("button");
-            if (!removeDisabled) {
-                btn.addEventListener("click", () => removeUrl(url));
-            }
-
-            urlList.appendChild(li);
-        });
-    }
-
-    function renderUrlListFocus(urls) {
-        urlListFocus.innerHTML = "";
-
-        if (!urls.length) {
-            urlListFocus.innerHTML =
-                '<div class="empty-state" style="padding: 20px;">No sites blocked yet</div>';
-            return;
-        }
-
-        urls.forEach((url) => {
-            const li = document.createElement("li");
-            li.className = "list-item";
-            const removeDisabled = enabled || timerActive ? "disabled" : "";
-            li.innerHTML = `
-                <span class="list-item-text">${url}</span>
-                <div class="list-item-actions">
-                    <button class="btn-small danger" ${removeDisabled} data-url="${url}">Remove</button>
-                </div>
-            `;
-
-            const btn = li.querySelector("button");
-            if (!removeDisabled) {
-                btn.addEventListener("click", () => removeUrl(url));
-            }
-
-            urlListFocus.appendChild(li);
-        });
-    }
-
-    function removeUrl(url) {
-        if (enabled || timerActive) return;
-
-        chrome.storage.sync.get("blockedUrls", (data) => {
-            const urls = (data.blockedUrls || []).filter((u) => u !== url);
-            blockedUrls = urls;
-            chrome.runtime.sendMessage({ action: "updateUrls", urls });
-            chrome.storage.sync.set({ blockedUrls: urls });
-            renderUrlList(urls);
-            renderUrlListFocus(urls);
-        });
-    }
-
-    function renderHistory() {
-        historyList.innerHTML = "";
-
-        if (!history.length) {
-            historyList.innerHTML = '<div class="empty-state">No focus sessions yet</div>';
-            return;
-        }
-
-        history.slice(0, 20).forEach((session) => {
-            const date = new Date(session.date);
-            const div = document.createElement("div");
-            div.className = "list-item";
-            const statusColor = session.completed ? "var(--primary)" : "#8B4B6B";
-            div.innerHTML = `
-                <div>
-                    <div class="list-item-text">${session.duration} minutes</div>
-                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
-                        ${date.toLocaleDateString()} ${date.toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit"
-                        })}
-                    </div>
-                </div>
-                <div style="font-size: 12px; color: ${statusColor};">
-                    ${session.completed ? "Completed" : "Incomplete"}
-                </div>
-            `;
-            historyList.appendChild(div);
-        });
-    }
-
-    function renderStats() {
-        const completed = history.filter((h) => h.completed);
-        const totalMinutes = completed.reduce((sum, h) => sum + h.duration, 0);
-
-        document.getElementById("total-sessions").textContent = completed.length;
-        document.getElementById("total-minutes").textContent = totalMinutes;
-
-        const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-        const maxMinutes = Math.max(...stats.dailyMinutes, 1);
-
-        weeklyChart.innerHTML = "";
-        stats.dailyMinutes.forEach((minutes, i) => {
-            const pct = (minutes / maxMinutes) * 100;
-            const div = document.createElement("div");
-            div.className = "bar-item";
-            div.innerHTML = `
-                <div class="bar-label">${days[i]}</div>
-                <div class="bar-track">
-                    <div class="bar-fill" style="width:${pct}%">
-                        <span class="bar-value">${minutes}m</span>
-                    </div>
-                </div>
-            `;
-            weeklyChart.appendChild(div);
-        });
-
-        blockedStats.innerHTML = "";
-        const entries = Object.entries(stats.blockedSites || {})
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5);
-        if (!entries.length) {
-            blockedStats.innerHTML = '<div class="empty-state">No data yet</div>';
-        } else {
-            entries.forEach(([site, count]) => {
-                const div = document.createElement("div");
-                div.className = "blocked-site-item";
-                div.innerHTML = `
-                    <span class="site-name">${site}</span>
-                    <span class="site-count">${count}</span>
-                `;
-                blockedStats.appendChild(div);
-            });
-        }
-    }
-
-    function normalizeDomain(input) {
-        const trimmed = input.trim();
-        if (!trimmed) return null;
-
-        try {
-            const hasProtocol = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed);
-            const url = new URL(hasProtocol ? trimmed : `https://${trimmed}`);
-            return url.hostname.replace(/^www\./i, "");
-        } catch (e) {
-            return trimmed;
-        }
-    }
-
-    function updateIcon(isEnabled) {
-        appLogo.src = isEnabled ? "icon_mischiveous.png" : "icon_sleep.png";
+import { send, formatDuration } from "./lib/api.js";
+import { extractDomain, domainMatches } from "./lib/match.js";
+import { createMascot } from "./ui/mascot.js";
+import { createTapper } from "./ui/status.js";
+import { confirmBox } from "./ui/confirm.js";
+import { normalizeDomain } from "./lib/match.js";
+import { say } from "./ui/voice.js";
+import { ICONS } from "./ui/icons.js";
+import { loadSoundSetting, play } from "./ui/sound.js";
+import { el, $, flash } from "./ui/dom.js";
+import { tierChip, tierIcon, iconButton, TIER_NAMES } from "./ui/tiers.js";
+
+let state = null;
+let hereDomain = null;
+let tick = null;
+let selectedMinutes = 25;
+let lastLineKey = "";
+
+const mascot = createMascot({ variant: "face", mood: "sleep", idle: { boredMs: 25000, sleepMs: 60000 }, onTap: () => onTap() });
+$("face-slot").append(mascot.el);
+let lineTimer = null;
+const onTap = createTapper({
+    mascot,
+    getState: () => state,
+    play,
+    speak: (text) => {
+        $("line").textContent = text;
+        clearTimeout(lineTimer);
+        lineTimer = setTimeout(() => state && renderLine(true), 6000);
     }
 });
+$("dashboard-btn").innerHTML = ICONS.gear;
+
+// ---------- data ----------
+
+async function refresh() {
+    const res = await send("getState");
+    if (!res.ok) return;
+    state = res;
+    render();
+}
+
+async function loadHere() {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        hereDomain = tab?.url ? extractDomain(tab.url) : null;
+    } catch {
+        hereDomain = null;
+    }
+}
+
+function tierOf(domain) {
+    if (!domain) return null;
+    if (state.superBans.some((s) => domainMatches(domain, s.domain))) return "super";
+    if (state.watched.some((w) => domainMatches(domain, w.domain))) return "watched";
+    if (state.bans.some((d) => domainMatches(domain, d))) return "ban";
+    return null;
+}
+
+function baseMood() {
+    if (state.timer) return "idle";
+    return state.bansActive ? "mischievous" : "sleep";
+}
+
+// ---------- render ----------
+
+function render() {
+    mascot.setMood(baseMood());
+    renderLine();
+    renderWake();
+    renderHere();
+    renderToday();
+    renderFocus();
+    renderSites();
+}
+
+function renderLine(force = false) {
+    const attempts = Object.entries(state.attemptsToday || {}).sort((a, b) => b[1] - a[1]);
+    const total = attempts.reduce((sum, [, n]) => sum + n, 0);
+    let key;
+    let vars = {};
+    if (state.timer) {
+        key = "home.focus";
+        vars = { left: formatDuration(state.timer.endTime - Date.now()) };
+    } else if (!state.bans.length && !state.superBans.length && !state.watched.length) {
+        key = "home.empty";
+    } else if (!state.bansActive) {
+        key = "home.off";
+    } else if (total > 0) {
+        key = "home.on";
+        vars = { n: total, site: attempts[0][0] };
+    } else {
+        key = "home.calm";
+    }
+    const signature = `${key}:${total}:${!!state.timer}`;
+    if (!force && signature === lastLineKey) return;
+    lastLineKey = signature;
+    $("line").textContent = say(key, vars);
+}
+
+function renderWake() {
+    const btn = $("wake-btn");
+    document.body.classList.toggle("asleep", !state.bansActive);
+    btn.disabled = !!state.timer;
+    btn.classList.toggle("asleep", !state.bansActive);
+    if (state.timer) btn.innerHTML = `${ICONS.lock}<span>Locked during focus</span>`;
+    else if (state.bansActive) btn.innerHTML = `${ICONS.moon}<span>Nap time</span>`;
+    else btn.innerHTML = `${ICONS.sun}<span>Wake up</span>`;
+    btn.setAttribute("aria-label", state.timer ? "Bans locked on during your focus session" : state.bansActive ? "Nap time: turn bans off (Tab Sniper is awake)" : "Wake up: turn bans on (Tab Sniper is asleep)");
+}
+
+function renderHere() {
+    const box = $("here");
+    box.hidden = !hereDomain;
+    if (!hereDomain) return;
+    $("here-domain").textContent = hereDomain;
+    const tier = tierOf(hereDomain);
+    $("here-status").replaceChildren(tier ? tierChip(tier) : "");
+    $("here-actions").hidden = !!tier;
+}
+
+function todayRows() {
+    const now = Date.now();
+    const rows = [];
+    for (const s of state.superBans) {
+        if (s.pausedUntil) rows.push({ tier: "super", domain: s.domain, meta: "paused", when: formatDuration(s.pausedUntil - now) });
+        else if (s.removalStatus === "cooling") rows.push({ tier: "super", domain: s.domain, meta: "removable in", when: formatDuration(s.removal.dueAt - now) });
+        else if (s.removalStatus === "due") rows.push({ tier: "super", domain: s.domain, meta: "removal ready", when: "" });
+    }
+    for (const w of state.watched) {
+        if (w.cooldown) {
+            rows.push({ tier: "watched", domain: w.domain, meta: "cooldown", when: formatDuration(w.cooldown.until - now), hot: true });
+            continue;
+        }
+        const top = [...w.usage].sort((a, b) => b.used / b.limit - a.used / a.limit)[0];
+        if (top && top.used >= 1) {
+            const when = top.kind === "swipes" ? `${top.used}/${top.limit} swipes` : `${Math.floor(top.used)}/${top.limit} min`;
+            rows.push({ tier: "watched", domain: w.domain, meta: top.kind === "streak" ? "short-form" : "this visit", when });
+        }
+    }
+    const attempts = Object.entries(state.attemptsToday || {}).sort((a, b) => b[1] - a[1]);
+    for (const [domain, n] of attempts) {
+        if (rows.some((r) => r.domain === domain)) continue;
+        rows.push({ tier: tierOf(domain) || "ban", domain, meta: "blocked", when: `${n} ${n === 1 ? "try" : "tries"}` });
+    }
+    return rows.slice(0, 6);
+}
+
+function renderToday() {
+    const list = $("today");
+    const rows = todayRows();
+    if (!rows.length) {
+        list.replaceChildren(el("li", { class: "empty", text: state.bansActive ? "Nothing yet. Keep it that way." : "Quiet. Super bans and Watched sites still count." }));
+        return;
+    }
+    list.replaceChildren(
+        ...rows.map((r) =>
+            el("li", { class: "row" }, [
+                tierIcon(r.tier),
+                el("div", { class: "grow" }, [el("div", { class: "name", text: r.domain }), el("div", { class: "meta", text: `${TIER_NAMES[r.tier]} · ${r.meta}` })]),
+                r.when ? el("span", { class: `when ${r.hot ? "hot" : ""}`, text: r.when }) : null
+            ])
+        )
+    );
+}
+
+// ---------- focus ----------
+
+function renderFocus() {
+    clearInterval(tick);
+    const running = !!state.timer;
+    $("focus-setup").hidden = running;
+    $("focus-running").hidden = !running;
+    if (!running) {
+        $("clock").textContent = `${String(selectedMinutes).padStart(2, "0")}:00`;
+        $("strip-fill").style.transform = "scaleX(0)";
+        renderChips();
+        $("start-focus").innerHTML = `${ICONS.play}<span>Start ${selectedMinutes} min</span>`;
+        return;
+    }
+    $("end-early").innerHTML = `${ICONS.stop}<span>End early</span>`;
+    const update = () => {
+        const { startTime, endTime } = state.timer;
+        const left = endTime - Date.now();
+        $("clock").textContent = formatDuration(left);
+        $("strip-fill").style.transform = `scaleX(${Math.min(1, (Date.now() - startTime) / (endTime - startTime))})`;
+        if (left <= 0) {
+            clearInterval(tick);
+            setTimeout(refresh, 1200);
+        }
+    };
+    update();
+    tick = setInterval(update, 1000);
+}
+
+function renderChips() {
+    const options = [
+        { minutes: 25, label: "25 min" },
+        { minutes: 50, label: "50 min" },
+        ...state.presets.map((p) => ({ minutes: p.minutes, label: `${p.name} · ${p.minutes}`, preset: p }))
+    ];
+    $("duration-chips").replaceChildren(
+        ...options.map((o) => {
+            const chip = el("button", {
+                class: "chip",
+                role: "radio",
+                "aria-checked": String(o.minutes === selectedMinutes),
+                text: o.label,
+                title: o.preset ? "Right-click to delete this preset" : null,
+                onclick: () => {
+                    selectedMinutes = o.minutes;
+                    $("custom-minutes").value = o.minutes;
+                    renderFocus();
+                }
+            });
+            if (o.preset) {
+                chip.addEventListener("contextmenu", async (e) => {
+                    e.preventDefault();
+                    await send("savePresets", { presets: state.presets.filter((p) => p.id !== o.preset.id) });
+                    refresh();
+                });
+            }
+            return chip;
+        })
+    );
+}
+
+$("custom-minutes").addEventListener("input", () => {
+    const n = parseInt($("custom-minutes").value, 10);
+    if (n >= 1 && n <= 240) {
+        selectedMinutes = n;
+        renderFocus();
+    }
+});
+
+$("start-focus").addEventListener("click", async () => {
+    const res = await send("startTimer", { minutes: selectedMinutes, source: "popup" });
+    if (!res.ok) {
+        $("focus-message").textContent = res.error;
+        mascot.express("grudging", 1500);
+        return;
+    }
+    $("focus-message").textContent = "";
+    mascot.express("proud", 1800);
+    mascot.react("bounce");
+    play("happy");
+    await refresh();
+    renderLine(true);
+});
+
+$("save-preset").addEventListener("click", async () => {
+    const name = (prompt("Name this preset:", `${selectedMinutes} min`) || "").trim();
+    if (!name) return;
+    await send("savePresets", { presets: [...state.presets, { id: Date.now(), name, minutes: selectedMinutes }] });
+    mascot.react("nod");
+    refresh();
+});
+
+$("end-early").addEventListener("click", () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL("challenge.html?purpose=endEarly") });
+});
+
+// ---------- sites ----------
+
+function siteRow(tier, domain, meta, action) {
+    return el("li", { class: "row" }, [
+        el("div", { class: "grow" }, [el("div", { class: "name", text: domain }), meta ? el("div", { class: "meta", text: meta }) : null]),
+        action
+    ]);
+}
+
+function renderSites() {
+    const groups = [];
+    const now = Date.now();
+
+    const supers = state.superBans.map((s) => {
+        const meta = s.pausedUntil ? `paused ${formatDuration(s.pausedUntil - now)}`
+            : s.removalStatus === "cooling" ? `removable in ${formatDuration(s.removal.dueAt - now)}`
+            : s.removalStatus === "due" ? "removal ready" : "locked 24/7";
+        return siteRow("super", s.domain, meta, iconButton("arrow", `Manage ${s.domain}`, () => chrome.runtime.openOptionsPage()));
+    });
+    const watched = state.watched.map((w) =>
+        siteRow("watched", w.domain, w.cooldown ? `cooldown ${formatDuration(w.cooldown.until - now)} · locked till then` : w.label || "custom",
+            iconButton("x", `Stop watching ${w.domain}`, async () => {
+                const r = await send("removeWatched", { domain: w.domain });
+                if (!r.ok) return sitesError(r.error);
+                mascot.express("grudging", 1400);
+            }, { disabled: !!w.cooldown, title: w.cooldown ? "Locked until the cooldown ends" : null }))
+    );
+    const bans = state.bans.map((d) =>
+        siteRow("ban", d, null, iconButton("x", `Remove ${d}`, async () => {
+            const r = await send("removeBan", { domain: d });
+            if (!r.ok) return sitesError(r.error);
+            mascot.express("grudging", 1400);
+        }, { disabled: state.bansActive, title: state.bansActive ? "Nap first to remove bans" : null }))
+    );
+    const banLock = state.bansActive && state.bans.length
+        ? el("p", { class: "lock-note", html: `${ICONS.lock}<span>${state.timer ? "Locked during your focus session." : "Bans can only be removed while I'm napping."}</span>` })
+        : null;
+
+    const group = (title, tier, items, emptyText, note = null) =>
+        el("section", { class: "group" }, [
+            el("div", { class: "group-head" }, [tierIcon(tier), el("h2", { text: title }), el("span", { class: "count", text: items.length })]),
+            note,
+            items.length ? el("ul", { class: "rows" }, items) : el("p", { class: "empty", text: emptyText })
+        ]);
+
+    // least to most intense
+    groups.push(group("Bans", "ban", bans, "Blocked while I'm awake.", banLock));
+    groups.push(group("Watched", "watched", watched, "Allowed, but cut off when you doomscroll."));
+    groups.push(group("Super bans", "super", supers, "Locked 24/7. Undo takes a challenge and a 12h wait."));
+    $("site-groups").replaceChildren(...groups);
+}
+
+function sitesError(text) {
+    $("sites-message").textContent = text;
+    mascot.express("grudging", 1500);
+    mascot.react("shake");
+}
+
+async function addSite(input, tier) {
+    const action = { ban: "addBan", watched: "addWatched", super: "addSuperBan" }[tier];
+    const res = await send(action, { input });
+    if (!res.ok) return res;
+    if (tier === "super") {
+        mascot.express("stern", 2000);
+        mascot.react("nod");
+        play("deny");
+    } else {
+        mascot.express(tier === "watched" ? "mischievous" : "smug", 1800);
+        mascot.react("bounce");
+        play("happy");
+    }
+    return res;
+}
+
+// Adding a super ban is the one add that's expensive to undo, so it always asks first.
+async function confirmSuper(input) {
+    const domain = normalizeDomain(input) || input;
+    mascot.express("stern", 4000);
+    return confirmBox({
+        title: `Super ban ${domain}?`,
+        body: `It's blocked 24/7, even while I nap. Undoing it takes a random challenge and a ${state.settings.coolOffHours}h wait.`,
+        confirmLabel: "Lock it",
+        tone: "super",
+        mascot: { mood: "stern", line: "You sure? I don't let these go easily." }
+    });
+}
+
+$("add-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = $("add-input").value.trim();
+    const tier = new FormData(e.target).get("tier");
+    if (!input) return;
+    if (tier === "super" && !(await confirmSuper(input))) return;
+    const res = await addSite(input, tier);
+    if (!res.ok) return sitesError(res.error);
+    $("add-input").value = "";
+    $("sites-message").textContent = `${res.domain} added.`;
+});
+
+$("here-actions").addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-tier]");
+    if (!btn || !hereDomain) return;
+    const tier = btn.dataset.tier;
+    if (tier === "super" && !(await confirmSuper(hereDomain))) return;
+    const res = await addSite(hereDomain, tier);
+    if (!res.ok) {
+        flash(btn);
+        mascot.express("grudging", 1500);
+    }
+});
+
+// ---------- wake / nap, tabs ----------
+
+$("wake-btn").addEventListener("click", async () => {
+    const turningOn = !state.bansActive;
+    const res = await send("toggle", { enabled: turningOn });
+    if (!res.ok) {
+        mascot.express("grudging", 1500);
+        return;
+    }
+    if (turningOn) {
+        mascot.express("happy", 1200);
+        mascot.react("bounce");
+        play("happy");
+    } else {
+        mascot.react("nod");
+    }
+    await refresh();
+    renderLine(true);
+});
+
+const TABS = ["home", "focus", "sites"];
+function selectTab(name, focus = false) {
+    for (const t of TABS) {
+        const tab = $(`tab-${t}`);
+        const on = t === name;
+        tab.setAttribute("aria-selected", String(on));
+        tab.tabIndex = on ? 0 : -1;
+        $(`panel-${t}`).hidden = !on;
+        if (on && focus) tab.focus();
+    }
+    $("stage").classList.toggle("compact", name !== "home");
+    try { sessionStorage.setItem("ts-tab", name); } catch { /* ignore */ }
+}
+TABS.forEach((t) => $(`tab-${t}`).addEventListener("click", () => selectTab(t)));
+document.querySelector(".tabs").addEventListener("keydown", (e) => {
+    const i = TABS.findIndex((t) => $(`tab-${t}`).getAttribute("aria-selected") === "true");
+    if (e.key === "ArrowRight") selectTab(TABS[(i + 1) % TABS.length], true);
+    if (e.key === "ArrowLeft") selectTab(TABS[(i + TABS.length - 1) % TABS.length], true);
+});
+
+$("dashboard-btn").addEventListener("click", () => chrome.runtime.openOptionsPage());
+$("manage-btn").addEventListener("click", () => chrome.runtime.openOptionsPage());
+
+const NOISY_KEYS = new Set(["watch", "activeFocus"]);
+chrome.storage.onChanged.addListener((changes) => {
+    if (Object.keys(changes).every((k) => NOISY_KEYS.has(k))) return;
+    refresh();
+});
+
+let savedTab = "home";
+try { savedTab = sessionStorage.getItem("ts-tab") || "home"; } catch { /* ignore */ }
+selectTab(TABS.includes(savedTab) ? savedTab : "home");
+loadSoundSetting();
+await loadHere();
+await refresh();
+setInterval(() => state && (renderToday(), renderSites()), 15000);

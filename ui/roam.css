@@ -1,0 +1,46 @@
+/* Roaming mascot + its speech bubble (positioned in page coordinates by ui/roam.js). */
+
+.roamer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 20;
+    touch-action: none;
+    cursor: grab;
+    user-select: none;
+    will-change: transform;
+}
+.roamer.back { z-index: 1; }
+.roamer.dragging { cursor: grabbing; z-index: 60; }
+.roamer.dragging .mascot { transform: scale(0.94, 1.08); transition: transform 0.12s var(--ease-out); }
+.roamer .mascot { width: 100%; display: block; }
+
+.roam-bubble {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 70;
+    max-width: 28ch;
+    font-size: var(--fs-sm);
+    text-wrap: pretty;
+    opacity: 0;
+    scale: 0.92;
+    transition: opacity 0.2s var(--ease-out), scale 0.2s var(--ease-out);
+    pointer-events: none;
+}
+.roam-bubble.show { opacity: 1; scale: 1; }
+.roam-bubble[data-side="left"] { transform-origin: right center; }
+.roam-bubble[data-side="right"] { transform-origin: left center; }
+.roam-bubble[data-side="top"] { transform-origin: center bottom; }
+
+/* tail points back at the mascot */
+.roam-bubble[data-side="left"]::after { left: auto; right: -8.5px; bottom: auto; top: 50%; transform: translateY(-50%) rotate(-45deg); }
+.roam-bubble[data-side="right"]::after { left: -8.5px; bottom: auto; top: 50%; transform: translateY(-50%) rotate(135deg); }
+/* side bubbles are one or two lines tall: a smaller tail and squarer corners keep the tail
+   from swallowing the bubble and meeting the curve with a notch */
+.roam-bubble[data-side="left"], .roam-bubble[data-side="right"] { border-radius: 12px; }
+.roam-bubble[data-side="left"]::after, .roam-bubble[data-side="right"]::after { width: 12px; height: 12px; border-bottom-right-radius: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .roam-bubble { transition: opacity 0.01ms; }
+}

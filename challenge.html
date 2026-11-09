@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Challenge · Tab Sniper</title>
+    <link rel="stylesheet" href="ui/tokens.css">
+    <link rel="stylesheet" href="ui/base.css">
+    <link rel="stylesheet" href="ui/mascot.css">
+    <link rel="stylesheet" href="ui/roam.css">
+    <link rel="stylesheet" href="page.css">
+</head>
+<body>
+    <main class="challenge-page">
+        <header>
+            <h1 id="title">Challenge</h1>
+            <p id="lead"></p>
+            <button class="text-btn" id="back">Back to the dashboard</button>
+        </header>
+        <div class="task">
+            <div class="titlebar">
+                <div class="dots" aria-hidden="true"><span class="dot pink"></span><span class="dot slate"></span></div>
+                <span class="label" id="task-label"></span>
+            </div>
+            <div class="body" id="challenge-root"></div>
+        </div>
+    </main>
+    <script type="module" src="challenge.js"></script>
+</body>
+</html>
