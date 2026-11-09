@@ -287,13 +287,24 @@ White with ink text, 2.5px outline, 20px corners and a rotated-square tail (bott
 ### Mascot
 An inline SVG drawn in mascot colors only, with moods (mischievous, asleep, smug, stern, encouraging and more). The eyes track the cursor and blink, the body breathes, and one-shot reactions are bounce, squash, hop, tilt-shake, nod, tilt and title-bar dot flicker. When asleep, a Zzz shows in the title bar and the dots dim. Every animation stops under reduced motion.
 
-### Toast
-Injected on Watched sites as a self-contained shadow-DOM sticker. It can't read the page's tokens, so it carries a fixed copy of the mascot palette (frame fill, ink 3px outline, 5px press shadow, white body, cream button) and a hand-inlined mascot face. Keep its hex values in sync with `ui/tokens.css`.
+### Roaming Mascot
+On full-tab pages (dashboard, tour, challenges) the mascot is a single roamer (`ui/roam.js`, geometry in `ui/roam-math.js`). Block and pause pages keep the big centered mascot instead.
+- **Perches:** each page declares a short list. `sit` rests the mascot on an element's top edge (front layer, used when it's engaged). `peek` tucks about half of it behind a window edge (back layer, used for idle wandering), so windows need `position: relative; z-index: 2`. Perches that would land off-screen are skipped.
+- **Hops:** about 0.6s: crouch, arc, stretch, squash on landing. Long trips split into 2 or 3 bounces. Under reduced motion it fades to the new spot instead.
+- **Bubble:** rides with the mascot, opens on the side with room (a perch may prefer a side), points its tail at the mascot, and fades after about 5s.
+- **Interaction:** tap = one live status fact while awake (`ui/status.js`), a sleepy mumble while asleep, annoyed after 4 rapid taps. Drag snaps to the nearest perch. A release faster than 1600px/s is a throw: it flies off and returns at the farthest perch, offended. The `mascotStill` setting stops idle wandering only.
+
+### On-Site Mascot
+Injected on Watched sites (`lib/sitemascot.js`) as a self-contained shadow-DOM drawing. It can't read the page's tokens, so it carries a fixed copy of the mascot palette and faces. Keep its hex values in sync with `ui/tokens.css`.
+- **Peek** (80% warning): rises from the bottom-right edge with its face showing over the edge, speaks, and ducks away after about 8s. Tap asks the extension for a status fact; throw dismisses it; a slow drop slides it back.
+- **Cutoff** (trip): hops to the middle of the page at 1.5x, says "That's enough.", and the screen fills with the screen charcoal before the block page loads (about 1.6s).
 
 ### Named Rules
 **The Heavier Is Harder Rule.** Visual weight tracks undo cost: outlined, then filled, then solid ink with a double ring. Never style a lighter tier heavier than a stricter one.
 
 **The No Limbs Rule.** The mascot never grows arms, legs or hands. It shows emotion only through its face, squash and stretch, tilt, bounce and its title-bar dots.
+
+**The Perch Rule.** The roaming mascot sits on or peeks from behind elements; it never covers the content you're reading or the task you're doing.
 
 **The Character Bounce Rule.** Overshoot easing (`--ease-spring`) and bounce keyframes belong to the mascot's character reactions. Interface state changes use `--ease-out`.
 
