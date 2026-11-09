@@ -70,7 +70,9 @@ try {
 }
 
 export function fill(template, vars = {}) {
-    return template.replace(/\{(\w+)\}/g, (_, key) => (vars[key] ?? "").toString());
+    return template
+        .replace(/\{(\w+)\}/g, (_, key) => (vars[key] ?? "").toString())
+        .replace(/(\d+%?) (?=\S)/g, "$1\u00a0"); // no-break space keeps "10 min", "25 Shorts" together
 }
 
 export function say(situation, vars = {}, rng = Math.random) {
