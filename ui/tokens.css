@@ -78,6 +78,7 @@
     --accent-text: var(--m-ink);
     --secondary: var(--m-slate-light);
     --danger: var(--m-blush-deep);
+    --danger-text: var(--m-ink);
     --focus: var(--m-blush);
     --selection: rgba(238, 147, 171, 0.45);
     --note: var(--m-blush);
@@ -93,7 +94,8 @@
         --text-muted: #565168;
         --outline: var(--m-ink);
         --secondary: var(--m-slate);
-        --danger: #c24d6c;
+        --danger: #a83a5a;
+        --danger-text: var(--m-white);
         --focus: var(--m-slate);
         --selection: rgba(92, 102, 136, 0.3);
         --note: #a3375a;
@@ -109,7 +111,8 @@
     --text-muted: #565168;
     --outline: var(--m-ink);
     --secondary: var(--m-slate);
-    --danger: #c24d6c;
+    --danger: #a83a5a;
+    --danger-text: var(--m-white);
     --focus: var(--m-slate);
     --selection: rgba(92, 102, 136, 0.3);
     --note: #a3375a;

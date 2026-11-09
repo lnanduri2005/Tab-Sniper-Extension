@@ -95,7 +95,7 @@ body { overflow-x: clip; }
 .heat .cell[data-level="2"], .scale .cell[data-level="2"] { background: color-mix(in srgb, var(--m-blush) 55%, var(--surface)); }
 .heat .cell[data-level="3"], .scale .cell[data-level="3"] { background: color-mix(in srgb, var(--m-blush) 80%, var(--surface)); }
 .heat .cell[data-level="4"], .scale .cell[data-level="4"] { background: var(--m-blush); }
-.heat .cell.today { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--m-cream); }
+.heat .cell.today { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
 .heat-legend { max-width: 760px; display: flex; justify-content: space-between; align-items: center; gap: var(--s3); margin-bottom: var(--s5); }
 .heat-legend .scale { display: flex; align-items: center; gap: 4px; }
 .heat-legend .scale .cell { width: 14px; height: 14px; aspect-ratio: auto; border-width: 2px; border-radius: 4px; }
