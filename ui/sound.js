@@ -9,7 +9,7 @@ export function setSoundEnabled(on) {
 
 export async function loadSoundSetting() {
     try {
-        const { settings } = await chrome.storage.sync.get("settings");
+        const { settings } = await chrome.storage.local.get("settings");
         enabled = !!settings?.soundOn;
     } catch {
         enabled = false;

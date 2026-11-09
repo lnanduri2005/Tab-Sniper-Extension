@@ -10,7 +10,7 @@ import {
     canComplete, grantPause, prunePauses
 } from "./lib/pause.js";
 import { newRemoval, completeRemovalChallenge, removalStatus } from "./lib/removal.js";
-import { migrate, ensureStatsShape } from "./lib/migrate.js";
+import { migrate, ensureStatsShape, SCHEMA_VERSION } from "./lib/migrate.js";
 import { dayKey, bumpDaily, readDaily } from "./lib/day.js";
 import { lockChallenge, releaseChallenge } from "./challenges/index.js";
 import { PROFILES, newWatchedEntry, clampWatchField, findWatched } from "./lib/profiles.js";
@@ -18,6 +18,7 @@ import { accrue, recordNav, evaluate, measure, emptyEntry, VISIT_GAP_MS } from "
 import { startCooldown, inCooldown, nextCooldownMinutes, pruneCooldowns } from "./lib/cooldown.js";
 import { siteMascot } from "./lib/sitemascot.js";
 import { statusFacts } from "./ui/status.js";
+import { buildBackup, applyBackup } from "./lib/backup.js";
 import { logEvent, pruneLog, summarize, trend } from "./lib/stats.js";
 
 const BLOCK_PAGE = chrome.runtime.getURL("blocked.html");
@@ -29,7 +30,8 @@ const ALARM_COOLDOWN_PREFIX = "cooldown-end:";
 const IDLE_SEC = 120;
 const CUTOFF_MS = 1600; // the mascot's on-page cutoff moment before the block page
 
-const SYNC_KEYS = ["enabled", "bans", "superBans", "watched", "settings", "pendingSettings", "removals", "challengeLocks", "presets"];
+// All storage is chrome.storage.local. CONFIG_KEYS are what the user set up; LOCAL_KEYS are runtime.
+const CONFIG_KEYS = ["enabled", "bans", "superBans", "watched", "settings", "pendingSettings", "removals", "challengeLocks", "presets"];
 const LOCAL_KEYS = [
     "timer", "history", "stats", "lastResetWeek", "pauses", "pauseRequests", "pauseUsage", "attempts", "dueNotified",
     "watch", "activeFocus", "cooldowns", "trips", "statsLog", "settingsUnlockedUntil"
@@ -39,7 +41,8 @@ const RULE_KEYS = new Set(["enabled", "bans", "superBans", "watched", "settings"
 // ---------- state ----------
 
 async function loadState() {
-    const [s, l] = await Promise.all([chrome.storage.sync.get(SYNC_KEYS), chrome.storage.local.get(LOCAL_KEYS)]);
+    const l = await chrome.storage.local.get([...CONFIG_KEYS, ...LOCAL_KEYS]);
+    const s = l;
     return {
         enabled: !!s.enabled,
         bans: s.bans || [],
@@ -68,13 +71,21 @@ async function loadState() {
     };
 }
 
+// One-time move to local-only storage: read whatever older versions left in Chrome sync,
+// copy it here, then clear this extension's sync area. Nothing reads or writes sync after this.
 async function runMigration() {
-    const [sync, local] = await Promise.all([chrome.storage.sync.get(null), chrome.storage.local.get(null)]);
+    const local = await chrome.storage.local.get(null);
+    if ((local.schemaVersion || 0) >= SCHEMA_VERSION) return;
+    let sync = {};
+    try {
+        sync = await chrome.storage.sync.get(null);
+    } catch {
+        sync = {};
+    }
     const result = migrate(sync, local, Date.now());
     if (!result) return;
-    await chrome.storage.sync.set(result.syncSet);
-    await chrome.storage.sync.remove(result.syncRemove);
     await chrome.storage.local.set(result.localSet);
+    if (result.clearSync) await chrome.storage.sync.clear().catch(() => {});
 }
 
 // ---------- blocking ----------
@@ -320,7 +331,7 @@ async function tick() {
 
     const resolved = resolvePending(state.settings, state.pendingSettings, now);
     if (resolved.changed) {
-        await chrome.storage.sync.set({ settings: resolved.settings, pendingSettings: resolved.pending });
+        await chrome.storage.local.set({ settings: resolved.settings, pendingSettings: resolved.pending });
     }
 
     const pruned = prunePauses(state.pauses, now);
@@ -431,14 +442,14 @@ const handlers = {
             entry = newWatchedEntry(match ? { profile: match[0] } : { domain });
         }
         if (state.watched.some((w) => w.domain === entry.domain)) return { ok: true, domain: entry.domain };
-        await chrome.storage.sync.set({ watched: [...state.watched, entry] });
+        await chrome.storage.local.set({ watched: [...state.watched, entry] });
         return { ok: true, domain: entry.domain };
     },
 
     async removeWatched({ domain }) {
         const state = await loadState();
         if (inCooldown(state.cooldowns, domain, Date.now())) return { ok: false, error: "Can't remove a site during its cooldown" };
-        await chrome.storage.sync.set({ watched: state.watched.filter((w) => w.domain !== domain) });
+        await chrome.storage.local.set({ watched: state.watched.filter((w) => w.domain !== domain) });
         return { ok: true };
     },
 
@@ -449,10 +460,23 @@ const handlers = {
         if (!entry || !(field in entry) || field === "domain" || field === "profile") return { ok: false, error: "Invalid field" };
         const clamped = clampWatchField(field, value);
         if (clamped === null) return { ok: false, error: "Invalid value" };
-        await chrome.storage.sync.set({
+        await chrome.storage.local.set({
             watched: state.watched.map((w) => (w.domain === domain ? { ...w, [field]: clamped } : w))
         });
         return { ok: true, value: clamped };
+    },
+
+    async exportConfig() {
+        return { ok: true, data: buildBackup(await loadState()) };
+    },
+
+    async importConfig({ data }) {
+        const state = await loadState();
+        const now = Date.now();
+        const r = applyBackup(state, data, now, { unlocked: state.settingsUnlockedUntil > now });
+        if (!r.ok) return r;
+        await chrome.storage.local.set(r.next);
+        return { ok: true, summary: r.summary };
     },
 
     async statusFacts() {
@@ -465,7 +489,7 @@ const handlers = {
         if (!enabled && timerRunning(state.timer, Date.now())) {
             return { ok: false, error: "Can't turn off during a focus session" };
         }
-        await chrome.storage.sync.set({ enabled: !!enabled });
+        await chrome.storage.local.set({ enabled: !!enabled });
         return { ok: true };
     },
 
@@ -473,14 +497,14 @@ const handlers = {
         const domain = normalizeDomain(input);
         if (!domain) return { ok: false, error: "That doesn't look like a website" };
         const state = await loadState();
-        if (!state.bans.includes(domain)) await chrome.storage.sync.set({ bans: [...state.bans, domain] });
+        if (!state.bans.includes(domain)) await chrome.storage.local.set({ bans: [...state.bans, domain] });
         return { ok: true, domain };
     },
 
     async removeBan({ domain }) {
         const state = await loadState();
         if (bansActive(state, Date.now())) return { ok: false, error: "Turn Tab Sniper off to remove bans" };
-        await chrome.storage.sync.set({ bans: state.bans.filter((d) => d !== domain) });
+        await chrome.storage.local.set({ bans: state.bans.filter((d) => d !== domain) });
         return { ok: true };
     },
 
@@ -489,7 +513,7 @@ const handlers = {
         if (!domain) return { ok: false, error: "That doesn't look like a website" };
         const state = await loadState();
         if (superDomainOf(state, domain)) return { ok: true, domain };
-        await chrome.storage.sync.set({ superBans: [...state.superBans, { domain, addedAt: Date.now() }] });
+        await chrome.storage.local.set({ superBans: [...state.superBans, { domain, addedAt: Date.now() }] });
         return { ok: true, domain };
     },
 
@@ -499,7 +523,7 @@ const handlers = {
         const removals = { ...state.removals };
         if (!removals[domain]) removals[domain] = newRemoval(Date.now());
         const { locks } = lockChallenge(state.challengeLocks, lockKey("removal", domain));
-        await chrome.storage.sync.set({ removals, challengeLocks: locks });
+        await chrome.storage.local.set({ removals, challengeLocks: locks });
         return { ok: true, url: chrome.runtime.getURL(`challenge.html?purpose=removal&d=${encodeURIComponent(domain)}`) };
     },
 
@@ -507,7 +531,7 @@ const handlers = {
         const state = await loadState();
         const removals = { ...state.removals };
         delete removals[domain];
-        await chrome.storage.sync.set({ removals });
+        await chrome.storage.local.set({ removals });
         return { ok: true };
     },
 
@@ -518,7 +542,7 @@ const handlers = {
         }
         const removals = { ...state.removals };
         delete removals[domain];
-        await chrome.storage.sync.set({ removals, superBans: state.superBans.filter((s) => s.domain !== domain) });
+        await chrome.storage.local.set({ removals, superBans: state.superBans.filter((s) => s.domain !== domain) });
         return { ok: true };
     },
 
@@ -535,7 +559,7 @@ const handlers = {
         }
         const key = lockKey(purpose, domain);
         const { locks, type } = lockChallenge(state.challengeLocks, key);
-        if (locks !== state.challengeLocks) await chrome.storage.sync.set({ challengeLocks: locks });
+        if (locks !== state.challengeLocks) await chrome.storage.local.set({ challengeLocks: locks });
         return { ok: true, type, mini: purpose === "endEarly" || purpose === "settings" };
     },
 
@@ -547,17 +571,17 @@ const handlers = {
             const removal = state.removals[domain];
             if (removalStatus(removal, now) !== "challenge") return { ok: false, error: "No challenge pending" };
             const done = completeRemovalChallenge(removal, now, state.settings.coolOffHours);
-            await chrome.storage.sync.set({ removals: { ...state.removals, [domain]: done }, challengeLocks });
+            await chrome.storage.local.set({ removals: { ...state.removals, [domain]: done }, challengeLocks });
             return { ok: true, dueAt: done.dueAt };
         }
         if (purpose === "endEarly") {
-            await chrome.storage.sync.set({ challengeLocks });
+            await chrome.storage.local.set({ challengeLocks });
             await endSession({ completed: false, reason: "ended-early" });
             return { ok: true };
         }
         if (purpose === "settings") {
             const until = now + SETTINGS_UNLOCK_MS;
-            await chrome.storage.sync.set({ challengeLocks });
+            await chrome.storage.local.set({ challengeLocks });
             await chrome.storage.local.set({ settingsUnlockedUntil: until });
             return { ok: true, until };
         }
@@ -570,7 +594,7 @@ const handlers = {
     },
 
     async savePresets({ presets }) {
-        await chrome.storage.sync.set({ presets });
+        await chrome.storage.local.set({ presets });
         return { ok: true };
     },
 
@@ -580,13 +604,13 @@ const handlers = {
         const r = requestSettingChange(state.settings, state.pendingSettings, key, value, now, { unlocked: state.settingsUnlockedUntil > now });
         if (r.status === "invalid") return { ok: false, error: "Invalid setting" };
         if (r.status === "locked") return { ok: false, status: "locked", error: "Settings are locked. Beat the quick challenge first." };
-        await chrome.storage.sync.set({ settings: r.settings, pendingSettings: r.pending });
+        await chrome.storage.local.set({ settings: r.settings, pendingSettings: r.pending });
         return { ok: true, status: r.status };
     },
 
     async cancelPendingSetting({ key }) {
         const state = await loadState();
-        await chrome.storage.sync.set({ pendingSettings: state.pendingSettings.filter((p) => p.key !== key) });
+        await chrome.storage.local.set({ pendingSettings: state.pendingSettings.filter((p) => p.key !== key) });
         return { ok: true };
     },
 

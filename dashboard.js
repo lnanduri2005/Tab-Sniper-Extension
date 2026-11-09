@@ -595,6 +595,58 @@ async function startGateChallenge() {
     });
 }
 
+// ---------- backup: export / import a file (no Chrome sync) ----------
+
+function backupRow() {
+    const picker = el("input", { type: "file", accept: "application/json,.json", hidden: true, "aria-label": "Choose a Tab Sniper backup file" });
+    picker.addEventListener("change", async () => {
+        const file = picker.files?.[0];
+        picker.value = "";
+        if (!file) return;
+        let data;
+        try {
+            data = JSON.parse(await file.text());
+        } catch {
+            return say$("settings-message", "That file isn't valid JSON.", true);
+        }
+        const r = await send("importConfig", { data });
+        if (!r.ok) return say$("settings-message", r.error, true);
+        const s = r.summary;
+        const added = [
+            s.bans && `${s.bans} ban${s.bans === 1 ? "" : "s"}`,
+            s.superBans && `${s.superBans} super ban${s.superBans === 1 ? "" : "s"}`,
+            s.watched && `${s.watched} Watched site${s.watched === 1 ? "" : "s"}`,
+            s.presets && `${s.presets} preset${s.presets === 1 ? "" : "s"}`,
+            s.settings && `${s.settings} setting${s.settings === 1 ? "" : "s"}`
+        ].filter(Boolean);
+        const skipped = s.settingsSkipped ? ` Skipped ${s.settingsSkipped} easier setting${s.settingsSkipped === 1 ? "" : "s"}: unlock Settings and import again to apply ${s.settingsSkipped === 1 ? "it" : "them"}.` : "";
+        say$("settings-message", `${added.length ? `Imported ${added.join(", ")}.` : "Nothing new in that file."}${skipped}`);
+        corner(added.length ? "More to guard. Love that." : "Already had all of that.", added.length ? "happy" : "idle", 2400, "settings");
+    });
+    const exportBtn = el("button", {
+        class: "btn small cream",
+        text: "Export",
+        onclick: async () => {
+            const r = await send("exportConfig");
+            if (!r.ok) return say$("settings-message", r.error, true);
+            const blob = new Blob([JSON.stringify(r.data, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = el("a", { href: url, download: `tab-sniper-backup-${new Date().toISOString().slice(0, 10)}.json` });
+            document.body.append(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            say$("settings-message", "Backup saved to your downloads.");
+        }
+    });
+    const importBtn = el("button", { class: "btn small ghost", text: "Import", onclick: () => picker.click() });
+    return settingRow({
+        label: "Back up your setup",
+        desc: "Save your bans, Watched sites, presets and settings to a file, or load one on another computer. Everything stays on this device unless you move the file yourself.",
+        control: [exportBtn, importBtn, picker]
+    });
+}
+
 function renderSettings() {
     renderGate();
     const open = unlocked();
@@ -654,6 +706,7 @@ function renderSettings() {
             corner(still ? "Free to roam!" : "Fine. I'll sit here.", still ? "happy" : "grudging");
         }
     });
+    rows.push(backupRow());
     rows.push(settingRow({ label: "Wandering", desc: "Whether I hop around on my own when you're idle. I still move when you switch tabs.", control: [stillBtn] }));
 
     $("settings").replaceChildren(...rows);
